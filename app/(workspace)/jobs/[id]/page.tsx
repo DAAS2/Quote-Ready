@@ -10,6 +10,8 @@ import { StatusBadge, JobTypeBadge } from "@/components/shared/status-badge";
 import { BandExplainer, ReadinessMeter, bandTone } from "@/components/shared/readiness-meter";
 import { EvidenceList } from "@/components/evidence/evidence-list";
 import { AuditTimeline } from "@/components/scope/audit-timeline";
+import { AnalysePanel } from "@/components/jobs/analyse-panel";
+import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,10 +65,31 @@ export default async function JobDetailPage({
 
       {job.safety_flag && <SafetyCard />}
 
-      {/* ── readiness summary ── */}
-      {scope && <ReadinessSummary scope={scope} />}
+      {!scope ? (
+        <>
+          <AnalysePanel jobId={job.id} />
+          {job.enquiry_text && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Original enquiry
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed">{job.enquiry_text}</p>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      ) : (
+        <>
+          {/* ── readiness summary ── */}
+          <ReadinessSummary scope={scope} />
+        </>
+      )}
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      {scope && (
+        <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         {/* ── left column ── */}
         <div className="space-y-5">
           {scope && (
@@ -184,6 +207,7 @@ export default async function JobDetailPage({
           </Card>
         </div>
       </div>
+      )}
 
       <p className="text-[11px] text-muted-foreground">
         Last updated {relativeTime(job.updated_at)} · Customer-provided information; verify
