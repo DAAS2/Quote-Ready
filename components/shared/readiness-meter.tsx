@@ -47,7 +47,8 @@ export function ReadinessMeter({
         aria-label={typeof score === "number" ? `Quote readiness ${score} percent` : "Not analysed"}
       >
         <div
-          className={cn("h-full rounded-full transition-[width] duration-500 ease-out", tone?.bg ?? "bg-muted-foreground/40")}
+          data-bar-fill
+          className={cn("qr-bar-fill h-full rounded-full transition-[width] duration-500 ease-out", tone?.bg ?? "bg-muted-foreground/40")}
           style={{ width: `${pct}%` }}
         />
       </div>

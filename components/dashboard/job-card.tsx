@@ -7,11 +7,12 @@ import type { JobListItem } from "@/lib/data/types";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
 import { cn } from "@/lib/utils";
 
-export function JobCard({ job }: { job: JobListItem }) {
+export function JobCard({ job, index = 0 }: { job: JobListItem; index?: number }) {
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className="group block rounded-lg border bg-card px-4 py-3.5 transition-colors hover:bg-accent/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60"
+      style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
+      className="qr-anim-rise group block rounded-lg border bg-card px-4 py-3.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40 hover:shadow-[0_12px_30px_-14px_rgb(37_64_233/0.25)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60"
     >
       <div className="flex items-center gap-3.5">
         <span

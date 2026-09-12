@@ -97,7 +97,7 @@ export default async function JobDetailPage({
       )}
 
       {scope && (
-        <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+        <div className="qr-anim-rise grid gap-5 lg:grid-cols-[1fr_340px]" style={{ animationDelay: "120ms" }}>
         {/* ── left column ── */}
         <div className="space-y-5">
           {scope && (
@@ -259,7 +259,7 @@ export default async function JobDetailPage({
       )}
 
       {scope && job.versions.length > 0 && (
-        <Card>
+        <Card className="qr-anim-rise" style={{ animationDelay: "200ms" }}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Scope history
@@ -292,7 +292,7 @@ function ReadinessSummary({ scope }: { scope: ScopePack }) {
   ] as const;
 
   return (
-    <Card>
+    <Card className="qr-anim-rise">
       <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
         <div className="sm:w-72 shrink-0">
           <div className="flex items-baseline justify-between gap-2">

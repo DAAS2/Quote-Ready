@@ -164,3 +164,94 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Landing motion system ──────────────────────────────────────────────── */
+
+@keyframes qr-float {
+  0%, 100% { transform: translateY(0) rotate(var(--float-rotate, 0deg)); }
+  50% { transform: translateY(-10px) rotate(var(--float-rotate, 0deg)); }
+}
+
+@keyframes qr-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(4%, -6%, 0) scale(1.08); }
+  66% { transform: translate3d(-5%, 4%, 0) scale(0.94); }
+}
+
+@keyframes qr-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.8); }
+}
+
+@keyframes qr-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes qr-wave {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes qr-rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes qr-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* transform-only bar fill-in (avoids width animation) */
+@keyframes qr-bar-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.qr-bar-fill {
+  transform-origin: left;
+  animation: qr-bar-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.qr-anim-float { animation: qr-float 7s ease-in-out infinite; }
+.qr-anim-pulse-dot { animation: qr-pulse-dot 2.2s ease-in-out infinite; }
+.qr-anim-rise { animation: qr-rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+.qr-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: qr-marquee 36s linear infinite;
+}
+.qr-marquee:hover .qr-marquee-track {
+  animation-play-state: paused;
+}
+
+.qr-hero-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.546 0.215 262.9 / 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.546 0.215 262.9 / 0.055) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 30%, transparent 75%);
+}
+
+.qr-text-gradient {
+  background: linear-gradient(100deg, oklch(0.546 0.215 262.9), oklch(0.62 0.17 245), oklch(0.646 0.194 41.1));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Reduced motion: kill non-essential motion globally */
+@media (prefers-reduced-motion: reduce) {
+  .qr-anim-float,
+  .qr-anim-pulse-dot,
+  .qr-anim-rise,
+  .qr-marquee-track,
+  .qr-bar-fill {
+    animation: none !important;
+  }
+  .qr-marquee-track {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+}

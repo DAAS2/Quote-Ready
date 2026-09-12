@@ -65,7 +65,7 @@ export default async function DashboardPage({
         {filtered.length === 0 ? (
           <EmptyJobs />
         ) : (
-          filtered.map((job) => <JobCard key={job.id} job={job} />)
+          filtered.map((job, i) => <JobCard key={job.id} job={job} index={i} />)
         )}
       </div>
     </div>
