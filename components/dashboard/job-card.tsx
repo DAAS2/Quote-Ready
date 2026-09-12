@@ -28,9 +28,9 @@ export function JobCard({ job, index = 0 }: { job: JobListItem; index?: number }
               <p className="truncate text-xs text-muted-foreground">{job.customer.suburb}</p>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <JobTypeBadge label={JOB_TYPE_LABELS[job.job_type]} className="h-5 px-1.5 text-[11px]" />
-            <StatusBadge status={job.status} safetyFlag={job.safety_flag} className="h-5 px-1.5 text-[11px]" />
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <JobTypeBadge label={JOB_TYPE_LABELS[job.job_type]} className="h-5 max-w-full px-1.5 text-[11px]" />
+            <StatusBadge status={job.status} safetyFlag={job.safety_flag} className="h-5 max-w-full px-1.5 text-[11px]" />
           </div>
         </div>
         <div className="hidden w-32 shrink-0 sm:block">

@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Camera, CircleCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { store } from "@/lib/data/jobs";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
-import { titleCase } from "@/lib/utils/format";
 import { relativeTime } from "@/lib/utils/format";
 import { StatusBadge, JobTypeBadge } from "@/components/shared/status-badge";
 import { BandExplainer, ReadinessMeter, bandTone } from "@/components/shared/readiness-meter";
-import { EvidenceList } from "@/components/evidence/evidence-list";
 import { AuditTimeline } from "@/components/scope/audit-timeline";
 import { AnalysePanel } from "@/components/jobs/analyse-panel";
 import { ActionButtons } from "@/components/scope/action-buttons";
@@ -17,7 +15,7 @@ import { VersionHistory } from "@/components/scope/version-history";
 import { VoiceNotePanel } from "@/components/voice/voice-note-panel";
 import { BriefingPlayer } from "@/components/voice/briefing-player";
 import { JudgeStrip } from "@/components/shared/judge-strip";
-import { Suspense } from "react";
+import { ScopeTabs } from "@/components/scope/scope-tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +40,6 @@ export default async function JobDetailPage({
   if (!job) notFound();
 
   const scope = job.scope;
-  const knownLabels = scope ? factLabels(scope) : [];
 
   return (
     <div className="space-y-6">
@@ -96,177 +93,91 @@ export default async function JobDetailPage({
         </>
       )}
 
-      {scope && (
-        <div className="qr-anim-rise grid gap-5 lg:grid-cols-[1fr_340px]" style={{ animationDelay: "120ms" }}>
-        {/* ── left column ── */}
-        <div className="space-y-5">
-          {scope && (
-            <>
+{scope && (
+        <div
+          className="qr-anim-rise grid items-start gap-5 lg:grid-cols-[1fr_340px]"
+          style={{ animationDelay: "120ms" }}
+        >
+          {/* ── left column: scope details ── */}
+          <div className="min-w-0 space-y-5">
+            <Card>
+              <CardContent className="px-5 py-4">
+                <ScopeTabs
+                  scope={scope}
+                  evidence={job.evidence}
+                  imagePaths={job.image_paths}
+                />
+              </CardContent>
+            </Card>
+
+            {job.versions.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Known details
+                    Scope history
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {knownLabels.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No details established yet.</p>
-                  ) : (
-                    <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
-                      {knownLabels.map(([label, value]) => (
-                        <div key={label} className="flex items-baseline justify-between gap-3 border-b border-dashed pb-2 last:border-0 sm:justify-start sm:border-0">
-                          <dt className="text-xs text-muted-foreground shrink-0">{label}</dt>
-                          <dd className="text-sm font-medium text-right">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
+                  <VersionHistory versions={job.versions} />
                 </CardContent>
               </Card>
+            )}
+          </div>
 
-              <MissingFieldsCard scope={scope} />
-            </>
-          )}
+          {/* ── right column: sticky action rail ── */}
+          <div className="min-w-0 space-y-5 lg:sticky lg:top-[72px]">
+            <ActionCard scope={scope} />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Evidence
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {job.image_paths.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {job.image_paths.map((src, i) => (
-                    <div
-                      key={src}
-                      className="relative size-20 overflow-hidden rounded-md border bg-secondary"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={src}
-                        alt={`Customer photo ${i + 1} for this job`}
-                        className="size-full object-cover"
-                        loading="lazy"
-                      />
-                      <span className="absolute bottom-1 right-1 rounded bg-background/80 px-1 font-mono text-[10px] text-muted-foreground">
-                        {i + 1}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <EvidenceList items={job.evidence} />
-            </CardContent>
-          </Card>
-
-          {scope && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Assumptions &amp; exclusions
+                  Take action
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Assumptions
-                  </p>
-                  <ul className="space-y-1.5">
-                    {scope.assumptions.map((a) => (
-                      <li key={a} className="flex items-start gap-2 text-sm leading-snug">
-                        <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Not included
-                  </p>
-                  <ul className="space-y-1.5">
-                    {scope.exclusions.map((a) => (
-                      <li key={a} className="flex items-start gap-2 text-sm leading-snug">
-                        <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <CardContent>
+                <ActionButtons
+                  jobId={job.id}
+                  actionType={scope.recommended_action.type}
+                  status={job.status}
+                />
               </CardContent>
             </Card>
-          )}
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Voice field notes
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <VoiceNotePanel jobId={job.id} status={job.status} />
+                <BriefingPlayer jobId={job.id} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Customer drafts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DraftsList drafts={job.drafts} />
+              </CardContent>
+            </Card>
+          </div>
         </div>
-
-        {/* ── right column ── */}
-        <div className="space-y-5">
-          {scope && (
-            <>
-              <ActionCard scope={scope} />
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Take action
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ActionButtons
-                    jobId={job.id}
-                    actionType={scope.recommended_action.type}
-                    status={job.status}
-                    safetyFlag={job.safety_flag}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Customer drafts
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <DraftsList drafts={job.drafts} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Voice field notes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <VoiceNotePanel jobId={job.id} status={job.status} />
-                  {scope && <BriefingPlayer jobId={job.id} />}
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AuditTimeline events={job.audit_events} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
       )}
 
-      {scope && job.versions.length > 0 && (
+      {scope && job.audit_events.length > 0 && (
         <Card className="qr-anim-rise" style={{ animationDelay: "200ms" }}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Scope history
+              Activity
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <VersionHistory versions={job.versions} />
+            <AuditTimeline events={job.audit_events} />
           </CardContent>
         </Card>
       )}
@@ -311,7 +222,7 @@ function ReadinessSummary({ scope }: { scope: ScopePack }) {
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Score components
           </p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-1 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-1 md:grid-cols-2">
             {components.map(([label, value, weight]) => (
               <div key={label} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-xs text-muted-foreground">{label}</span>
@@ -322,58 +233,12 @@ function ReadinessSummary({ scope }: { scope: ScopePack }) {
                   {value}
                 </span>
                 <span className="w-9 shrink-0 text-right font-mono text-[10px] text-muted-foreground/70">
-                  ×{weight.toLocaleString(undefined, { style: "percent", minimumFractionDigits: 0 })}
+                  ×{((weight as number) / 100).toLocaleString(undefined, { style: "percent" })}
                 </span>
               </div>
             ))}
           </div>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MissingFieldsCard({ scope }: { scope: ScopePack }) {
-  const customerAsks = scope.missing_fields.filter((m) => m.ask_customer);
-  const onSite = scope.missing_fields.filter((m) => !m.ask_customer);
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-          Missing information
-          <Badge variant="outline" className="font-mono">
-            {scope.missing_fields.length}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {scope.missing_fields.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nothing missing — all required details are established.
-          </p>
-        ) : (
-          <ul className="space-y-2.5">
-            {[...customerAsks, ...onSite].map((m) => (
-              <li key={m.key} className="flex items-start gap-3">
-                <span
-                  className={`mt-1 size-1.5 shrink-0 rounded-full ${m.critical ? "bg-safety" : "bg-warning"}`}
-                  aria-hidden
-                />
-                <div>
-                  <p className="text-sm font-medium">
-                    {m.label}
-                    {m.critical && (
-                      <Badge variant="outline" className="ml-2 h-4.5 border-safety/30 px-1 text-[10px] font-medium text-safety">
-                        Critical
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{m.why}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
       </CardContent>
     </Card>
   );
@@ -448,43 +313,4 @@ function SafetyCard() {
       </AlertDescription>
     </Alert>
   );
-}
-
-function factLabels(scope: ScopePack): Array<[string, string]> {
-  const out: Array<[string, string]> = [];
-  for (const [key, value] of Object.entries(scope.known_facts)) {
-    if (key.startsWith("note_")) continue;
-    if (key === "photo_count") {
-      out.push(["Photos", `${value} attached`]);
-      continue;
-    }
-    if (key === "voice_note_count") {
-      out.push(["Voice notes", `${value} recorded`]);
-      continue;
-    }
-    const label = FACT_LABELS[key] ?? titleCase(key);
-    out.push([label, typeof value === "string" ? titleCaseValue(value) : String(value)]);
-  }
-  return out;
-}
-
-const FACT_LABELS: Record<string, string> = {
-  location_in_property: "Location",
-  fixture_type: "Fixture",
-  system_type: "System",
-  system_age: "System age",
-  symptoms: "Symptoms",
-  urgency: "Urgency",
-  property_access: "Access",
-  water_isolation_access: "Isolation",
-  water_damage: "Water damage",
-  customer_availability: "Availability",
-  suburb: "Suburb",
-};
-
-function titleCaseValue(v: string): string {
-  return v
-    .split(/[\s_]+/)
-    .map((w) => (w.length <= 3 && w === w.toUpperCase() ? w : w[0].toUpperCase() + w.slice(1)))
-    .join(" ");
 }

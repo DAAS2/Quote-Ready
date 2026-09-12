@@ -1,5 +1,5 @@
 import type { JobFacts, JobStatus, MessageType, ScopePack } from "@/lib/ai/schemas";
-import { DEMO_JOB_SEEDS, DEMO_VOICE_NOTE } from "./demo-seed";
+import { DEMO_JOB_SEEDS } from "./demo-seed";
 import { buildSeedPack, SEED_AGE_HOURS } from "./seed";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
 import type {

@@ -63,20 +63,30 @@ export function BeforeAfter() {
     () => {
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.from("[data-ba]", {
-          opacity: 0,
-          y: 20,
-          duration: 0.6,
-          stagger: 0.15,
-          ease: "power3.out",
-          scrollTrigger: { trigger: root.current, start: "top 75%", toggleActions: "play none none reverse" },
-        });
-        gsap.from("[data-ba-line]", {
-          scaleX: 0,
-          duration: 0.9,
-          ease: "power2.inOut",
-          scrollTrigger: { trigger: root.current, start: "top 70%", toggleActions: "play none none reverse" },
-        });
+        gsap.fromTo(
+          "[data-ba]",
+          { opacity: 0, y: 20 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.6,
+            stagger: 0.15,
+            ease: "power3.out",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 78%", once: true },
+          },
+        );
+        gsap.fromTo(
+          "[data-ba-line]",
+          { scaleX: 0 },
+          {
+            scaleX: 1,
+            duration: 0.9,
+            ease: "power2.inOut",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 70%", once: true },
+          },
+        );
       });
     },
     { scope: root },
@@ -170,14 +180,19 @@ export function Features() {
     () => {
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.from("[data-feature-card]", {
-          opacity: 0,
-          y: 26,
-          duration: 0.65,
-          stagger: 0.12,
-          ease: "power3.out",
-          scrollTrigger: { trigger: root.current, start: "top 70%", toggleActions: "play none none reverse" },
-        });
+        gsap.fromTo(
+          "[data-feature-card]",
+          { opacity: 0, y: 26 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.65,
+            stagger: 0.12,
+            ease: "power3.out",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 78%", once: true },
+          },
+        );
       });
     },
     { scope: root },
@@ -252,14 +267,19 @@ export function Pipeline() {
             scrollTrigger: { trigger: root.current, start: "top 65%", end: "bottom 75%", scrub: 0.7 },
           },
         );
-        gsap.from("[data-pipe-step]", {
-          opacity: 0,
-          x: -18,
-          duration: 0.5,
-          stagger: 0.14,
-          ease: "power2.out",
-          scrollTrigger: { trigger: root.current, start: "top 70%", toggleActions: "play none none reverse" },
-        });
+        gsap.fromTo(
+          "[data-pipe-step]",
+          { opacity: 0, x: -18 },
+          {
+            opacity: 1,
+            x: 0,
+            duration: 0.5,
+            stagger: 0.14,
+            ease: "power2.out",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 70%", once: true },
+          },
+        );
       });
     },
     { scope: root },
@@ -340,18 +360,23 @@ export function Metrics() {
               duration: 1.4,
               snap: { textContent: 1 },
               ease: "power2.out",
-              scrollTrigger: { trigger: el, start: "top 88%", toggleActions: "play none none reverse" },
+              scrollTrigger: { trigger: el, start: "top 88%", once: true },
             },
           );
         }
-        gsap.from("[data-metric]", {
-          opacity: 0,
-          y: 16,
-          duration: 0.5,
-          stagger: 0.1,
-          ease: "power2.out",
-          scrollTrigger: { trigger: root.current, start: "top 85%", toggleActions: "play none none reverse" },
-        });
+        gsap.fromTo(
+          "[data-metric]",
+          { opacity: 0, y: 16 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.5,
+            stagger: 0.1,
+            ease: "power2.out",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 85%", once: true },
+          },
+        );
       });
     },
     { scope: root },
@@ -383,14 +408,19 @@ export function ClosingCta() {
     () => {
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.from("[data-cta-child]", {
-          opacity: 0,
-          y: 22,
-          duration: 0.7,
-          stagger: 0.12,
-          ease: "power3.out",
-          scrollTrigger: { trigger: root.current, start: "top 72%", toggleActions: "play none none reverse" },
-        });
+        gsap.fromTo(
+          "[data-cta-child]",
+          { opacity: 0, y: 22 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.7,
+            stagger: 0.12,
+            ease: "power3.out",
+            immediateRender: false,
+            scrollTrigger: { trigger: root.current, start: "top 72%", once: true },
+          },
+        );
       });
     },
     { scope: root },

@@ -4,7 +4,6 @@ import { transcribeAudio, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client"
 import { extractVoiceUpdate, GEMINI_CONFIGURED, GeminiError } from "@/lib/ai/gemini";
 import { isDemoMode } from "@/lib/ai/demo-mode";
 import { buildVoicePreview, deterministicVoiceUpdate } from "@/lib/ai/voice";
-import { mergeFacts } from "@/lib/rules/merge";
 import { DEMO_VOICE_NOTE } from "@/lib/data/demo-seed";
 
 export const runtime = "nodejs";

@@ -24,12 +24,10 @@ export function ActionButtons({
   jobId,
   actionType,
   status,
-  safetyFlag,
 }: {
   jobId: string;
   actionType: ActionType;
   status: string;
-  safetyFlag: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
