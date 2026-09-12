@@ -32,6 +32,7 @@ interface MemJob {
   updated_at: string;
   image_paths: string[];
   scope: ScopePack | null;
+  versions: ScopePack[];
   evidence: EvidenceRow[];
   audit: AuditRow[];
   drafts: DraftRow[];
@@ -75,6 +76,7 @@ function ensureSeed(): void {
       updated_at: created,
       image_paths: seed.image_paths,
       scope: pack,
+      versions: [pack],
       evidence,
       audit: [
         {
@@ -120,6 +122,7 @@ export class MemoryStore implements Store {
       extracted_facts: job.extracted_facts,
       scope: job.scope,
       scope_version: job.scope?.version ?? null,
+      versions: job.versions,
       evidence: [...job.evidence].sort((a, b) => a.created_at.localeCompare(b.created_at)),
       audit_events: [...job.audit].sort((a, b) => b.created_at.localeCompare(a.created_at)),
       drafts: [...job.drafts].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -145,6 +148,7 @@ export class MemoryStore implements Store {
       updated_at: ts,
       image_paths: input.image_paths,
       scope: null,
+      versions: [],
       evidence: [
         {
           id: crypto.randomUUID(),
@@ -185,6 +189,7 @@ export class MemoryStore implements Store {
     if (!job) return;
     job.extracted_facts = facts;
     job.scope = pack;
+    job.versions.push(pack);
     job.readiness_score = pack.readiness_score;
     job.safety_flag = pack.safety_flag;
     job.inspection_recommended = pack.inspection_recommended;
@@ -229,11 +234,12 @@ export class MemoryStore implements Store {
     return id;
   }
 
-  async approveDraft(jobId: string, draftId: string): Promise<void> {
+  async approveDraft(jobId: string, draftId: string, body?: string): Promise<void> {
     const job = jobs.get(jobId);
     if (!job) return;
     const d = job.drafts.find((x) => x.id === draftId);
     if (d && d.status === "draft") {
+      if (body !== undefined) d.body = body;
       d.status = "approved";
       d.approved_at = nowIso();
       job.updated_at = nowIso();

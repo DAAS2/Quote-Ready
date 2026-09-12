@@ -136,11 +136,11 @@ export class SupabaseStore implements Store {
         .from("scope_versions")
         .select("version_number, scope")
         .eq("job_id", id)
-        .order("version_number", { ascending: false })
-        .limit(1),
+        .order("version_number", { ascending: true }),
     ]);
 
-    const latestScope = scopes.data?.[0]?.scope as ScopePack | undefined;
+    const versions = (scopes.data ?? []).map((r) => r.scope as ScopePack);
+    const latestScope = versions[versions.length - 1];
 
     return {
       id: data.id,
@@ -161,6 +161,7 @@ export class SupabaseStore implements Store {
       extracted_facts: (latestScope?.facts ?? data.extracted_facts) as JobFacts,
       scope: latestScope ?? null,
       scope_version: latestScope?.version ?? null,
+      versions,
       evidence: (evidence.data ?? []).map(toEvidenceRow),
       audit_events: (audits.data ?? []).map(toAuditRow),
       drafts: (drafts.data ?? []).map(toDraftRow),
@@ -258,10 +259,14 @@ export class SupabaseStore implements Store {
     return data.id;
   }
 
-  async approveDraft(jobId: string, draftId: string): Promise<void> {
+  async approveDraft(jobId: string, draftId: string, body?: string): Promise<void> {
     const { error } = await this.db
       .from("message_drafts")
-      .update({ status: "approved", approved_at: new Date().toISOString() })
+      .update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        ...(body !== undefined ? { body } : {}),
+      })
       .eq("id", draftId)
       .eq("job_id", jobId)
       .eq("status", "draft");

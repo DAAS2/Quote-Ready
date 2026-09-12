@@ -11,6 +11,9 @@ import { BandExplainer, ReadinessMeter, bandTone } from "@/components/shared/rea
 import { EvidenceList } from "@/components/evidence/evidence-list";
 import { AuditTimeline } from "@/components/scope/audit-timeline";
 import { AnalysePanel } from "@/components/jobs/analyse-panel";
+import { ActionButtons } from "@/components/scope/action-buttons";
+import { DraftsList } from "@/components/scope/drafts-list";
+import { VersionHistory } from "@/components/scope/version-history";
 import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -193,7 +196,36 @@ export default async function JobDetailPage({
 
         {/* ── right column ── */}
         <div className="space-y-5">
-          {scope && <ActionCard scope={scope} />}
+          {scope && (
+            <>
+              <ActionCard scope={scope} />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Take action
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActionButtons
+                    jobId={job.id}
+                    actionType={scope.recommended_action.type}
+                    status={job.status}
+                    safetyFlag={job.safety_flag}
+                  />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Customer drafts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DraftsList drafts={job.drafts} />
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           <Card>
             <CardHeader className="pb-3">
@@ -207,6 +239,19 @@ export default async function JobDetailPage({
           </Card>
         </div>
       </div>
+      )}
+
+      {scope && job.versions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Scope history
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <VersionHistory versions={job.versions} />
+          </CardContent>
+        </Card>
       )}
 
       <p className="text-[11px] text-muted-foreground">

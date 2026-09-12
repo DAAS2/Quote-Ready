@@ -53,6 +53,8 @@ export interface JobDetail extends JobListItem {
   extracted_facts: JobFacts;
   scope: ScopePack | null;
   scope_version: number | null;
+  /** all persisted scope packs, newest last */
+  versions: ScopePack[];
   evidence: EvidenceRow[];
   audit_events: AuditRow[];
   drafts: DraftRow[];
@@ -90,7 +92,7 @@ export interface Store {
     jobId: string,
     draft: { message_type: MessageType; body: string; requests_fields: string[] },
   ): Promise<string>;
-  approveDraft(jobId: string, draftId: string): Promise<void>;
+  approveDraft(jobId: string, draftId: string, body?: string): Promise<void>;
   addAudit(jobId: string, event: AuditInsert): Promise<void>;
   listAudits(jobId: string): Promise<AuditRow[]>;
   resetDemo(): Promise<void>;
