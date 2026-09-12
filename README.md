@@ -138,3 +138,4 @@ Environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KE
 5. **ElevenLabs (2:00)** — record or *Use demo note* → transcript → extracted update → **what changed** → apply → v2 scope, inspection now required.
 6. **Safety (2:45)** — Sam's job: gas smell → escalation card, estimate blocked.
 7. **Close (3:15)** — evaluation page 10/10; faster qualification, fewer wasted visits, fewer underquoted jobs.
+# Quote-Ready
