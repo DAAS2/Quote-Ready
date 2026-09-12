@@ -42,7 +42,7 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! });
 }
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
 
 export async function extractJobFacts(input: {
   enquiry_text: string;
@@ -70,9 +70,7 @@ export async function extractJobFacts(input: {
         systemInstruction: EXTRACTION_SYSTEM_PROMPT,
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 2048,
-        // skip "thinking" for speed + deterministic cost in a small extraction task
-        thinkingConfig: { thinkingBudget: 0 },
+        maxOutputTokens: 4096,
       },
     });
     text = response.text;
@@ -91,7 +89,13 @@ export async function extractJobFacts(input: {
   try {
     json = JSON.parse(stripToFence(text));
   } catch {
-    throw new GeminiError(`Gemini response was not valid JSON`, "invalid_json");
+    // Robust recovery: scan for the first balanced JSON object — models
+    // occasionally wrap or truncate; never fabricate, but salvage valid output.
+    json = tryExtractJsonObject(text);
+    if (json === undefined) {
+      console.warn("[QuoteReady] Gemini JSON parse failed, raw head:", text.slice(0, 160));
+      throw new GeminiError(`Gemini response was not valid JSON`, "invalid_json");
+    }
   }
 
   const parsed = GeminiAnalysisSchema.safeParse(json);
@@ -111,6 +115,47 @@ function stripToFence(text: string): string {
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
+/** Find the first balanced top-level JSON object/array in arbitrary text. */
+function tryExtractJsonObject(text: string): unknown | undefined {
+  const candidates: string[] = [];
+  const starts: number[] = [];
+  const stack: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      // skip string contents
+      i++;
+      while (i < text.length) {
+        if (text[i] === "\\") i += 2;
+        else if (text[i] === '"') break;
+        else i++;
+      }
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      starts.push(i);
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      if (stack.length === 0) continue;
+      const open = stack.pop()!;
+      if ((open === "{" && ch === "}") || (open === "[" && ch === "]")) {
+        if (stack.length === 0) {
+          const start = starts.pop()!;
+          candidates.push(text.slice(start, i + 1));
+        }
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try the next balanced block
+    }
+  }
+  return undefined;
+}
+
 /* ── Voice-note structured update ────────────────────────────────────────── */
 
 export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {
@@ -125,8 +170,7 @@ export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdat
         systemInstruction: VOICE_UPDATE_SYSTEM_PROMPT,
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
+        maxOutputTokens: 2048,
       },
     });
     text = response.text;

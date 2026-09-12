@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
-import { speakText, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client";
+import { speakText, ELEVENLABS_CONFIGURED, ElevenLabsError } from "@/lib/elevenlabs/client";
 import { isDemoMode } from "@/lib/ai/demo-mode";
 import { titleCase } from "@/lib/utils/format";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
@@ -45,8 +45,12 @@ export async function POST(
       });
     } catch (error) {
       console.warn("[QuoteReady] TTS failed:", (error as Error).message);
+      const voiceHint =
+        error instanceof ElevenLabsError && error.kind === "voice_not_available"
+          ? "To hear briefings, add a cloned voice in ElevenLabs and set ELEVENLABS_VOICE_ID — until then the written briefing is shown."
+          : "Speech generation failed — the written briefing is shown instead.";
       return NextResponse.json(
-        { error: "Speech generation failed — the written briefing is shown instead.", text: briefingText },
+        { error: voiceHint, text: briefingText },
         { status: 503 },
       );
     }

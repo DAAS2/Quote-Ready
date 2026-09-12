@@ -23,7 +23,7 @@ function getClient(): ElevenLabsClient {
 export class ElevenLabsError extends Error {
   constructor(
     message: string,
-    public readonly kind: "not_configured" | "api",
+    public readonly kind: "not_configured" | "api" | "voice_not_available",
   ) {
     super(message);
     this.name = "ElevenLabsError";
@@ -77,6 +77,14 @@ export async function speakText(text: string): Promise<Buffer> {
     return mp3;
   } catch (error) {
     if (error instanceof ElevenLabsError) throw error;
+    const status = (error as { status?: number }).status;
+    if (status === 402) {
+      // Free accounts can only use voices they have cloned themselves.
+      throw new ElevenLabsError(
+        "The configured voice requires a paid plan. Create an instant-cloned voice in ElevenLabs and set ELEVENLABS_VOICE_ID to it.",
+        "voice_not_available",
+      );
+    }
     throw new ElevenLabsError(`Speech generation failed: ${(error as Error).message}`, "api");
   }
 }

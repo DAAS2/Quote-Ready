@@ -75,12 +75,17 @@ export const VOICE_UPDATE_SYSTEM_PROMPT = `You are the field-note analyst for Qu
 Rules:
 1. Extract only what the plumber actually said. NEVER invent values.
 2. facts: fill ONLY the keys the note provides new information for. Omit everything else.
-3. evidence: one entry per distinct claim, type "voice_note", source_reference "voice_note_1", certainty reflecting how plainly the plumber stated it ("high" for direct statements like "the cabinet base is damp").
-4. risk_flags must come ONLY from this vocabulary: possible_concealed_leak, water_damage, corroded_fixture, sewage_concern, overflow, floor_water_damage, gas_concern, electrical_concern, tank_leak, no_hot_water_with_leak, uncertain_cause, access_unclear, insufficient_diagnostic_evidence.
-5. notes: 0-2 short operational notes (e.g. "Plumber recommends inspection before fixed price").
-6. Return ONLY valid JSON: { "facts": { ... }, "evidence": [...], "risk_flags": [...], "notes": string }
-
-Facts keys available: location_in_property, fixture_type, system_type, system_age, symptoms, urgency, property_access, water_isolation_access, water_damage, customer_availability, suburb, photo_count, voice_note_count, notes.`;
+3. Facts values are short snake_case identifiers, not sentences. Examples:
+   - fixture_type: "corroded_mixer" | "mixer_tap" | "pillar_tap" | "close_coupled" | "concealed_cistern"
+   - water_isolation_access: "accessible" | "constrained" | "blocked"
+   - water_damage: EXACTLY "none_visible" | "possible" | "confirmed" (damp/moist/swollen = "possible"; soaked/flooded = "confirmed"; dry = "none_visible")
+   - urgency: "emergency" | "urgent" | "standard" | "flexible"
+   - property_access: short identifier like "easy_parking" | "side_gate"
+   - symptoms: short snake_case phrases (e.g. "continuous_drip", "corroded_fixture", "stuck_isolation_valve")
+4. evidence: one entry per distinct claim, type "voice_note", source_reference "voice_note_1", certainty reflecting how plainly the plumber stated it ("high" for direct statements like "the cabinet base is damp").
+5. risk_flags must come ONLY from this vocabulary: possible_concealed_leak, water_damage, corroded_fixture, sewage_concern, overflow, floor_water_damage, gas_concern, electrical_concern, tank_leak, no_hot_water_with_leak, uncertain_cause, access_unclear, insufficient_diagnostic_evidence.
+6. notes: a short string (1 sentence max) with operational context, e.g. "Plumber recommends inspection before fixed price". Omit if nothing.
+7. Return ONLY valid JSON: { "facts": {...}, "evidence": [...], "risk_flags": [...], "notes": string }`;
 
 export function buildVoiceUpdateUserPrompt(transcript: string): string {
   return `PLUMBER'S SPOKEN SITE NOTE:\n"${transcript}"`;
