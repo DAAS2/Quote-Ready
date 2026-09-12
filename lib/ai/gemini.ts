@@ -1,9 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import {
   GeminiAnalysisSchema,
+  VoiceUpdateSchema,
   type GeminiAnalysis,
+  type VoiceUpdate,
 } from "./schemas";
-import { EXTRACTION_SYSTEM_PROMPT, buildExtractionUserPrompt } from "./prompts";
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  VOICE_UPDATE_SYSTEM_PROMPT,
+  buildExtractionUserPrompt,
+  buildVoiceUpdateUserPrompt,
+} from "./prompts";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Gemini extraction. One multimodal call, strict JSON, Zod-validated.
@@ -102,4 +109,48 @@ function stripToFence(text: string): string {
   const trimmed = text.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
+}
+
+/* ── Voice-note structured update ────────────────────────────────────────── */
+
+export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: buildVoiceUpdateUserPrompt(transcript) }] }],
+      config: {
+        systemInstruction: VOICE_UPDATE_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(stripToFence(text));
+  } catch {
+    throw new GeminiError("Gemini response was not valid JSON", "invalid_json");
+  }
+
+  const parsed = VoiceUpdateSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new GeminiError(
+      `Voice update failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      "schema",
+    );
+  }
+  return parsed.data;
 }

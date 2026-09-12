@@ -14,6 +14,8 @@ import { AnalysePanel } from "@/components/jobs/analyse-panel";
 import { ActionButtons } from "@/components/scope/action-buttons";
 import { DraftsList } from "@/components/scope/drafts-list";
 import { VersionHistory } from "@/components/scope/version-history";
+import { VoiceNotePanel } from "@/components/voice/voice-note-panel";
+import { BriefingPlayer } from "@/components/voice/briefing-player";
 import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -222,6 +224,18 @@ export default async function JobDetailPage({
                 </CardHeader>
                 <CardContent>
                   <DraftsList drafts={job.drafts} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Voice field notes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <VoiceNotePanel jobId={job.id} status={job.status} />
+                  {scope && <BriefingPlayer jobId={job.id} />}
                 </CardContent>
               </Card>
             </>
