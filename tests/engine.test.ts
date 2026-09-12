@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JobFacts, ScopePack } from "@/lib/ai/schemas";
+import type { ScopePackInput } from "@/lib/rules/engine";
 import { buildScopePack } from "@/lib/rules/engine";
 import { mergeFacts } from "@/lib/rules/merge";
 import { deriveAnalysisStatus, canTransition } from "@/lib/rules/status";
@@ -12,10 +13,11 @@ import {
   FIXTURE_B,
   FIXTURE_TAP_COMPLETE,
   VOICE_NOTE_TAP,
+  facts,
   EVALUATION_FIXTURES,
 } from "./fixtures/scopes";
 
-const baseInput = (over: Partial<Parameters<typeof buildScopePack>[0]>) =>
+const baseInput = (over: Partial<ScopePackInput>): ScopePackInput =>
   ({
     job_type: "leaking_tap",
     facts: FIXTURE_A,
@@ -76,7 +78,7 @@ describe("readiness scoring", () => {
 
   it("every score component stays within 0-100", () => {
     const pack = buildScopePack(
-      baseInput({ facts: { location_in_property: "bathroom" }, raw_text: "" }),
+      baseInput({ facts: facts({ location_in_property: "bathroom" }), raw_text: "" }),
     );
     for (const v of Object.values(pack.components)) {
       expect(v).toBeGreaterThanOrEqual(0);

@@ -139,6 +139,8 @@ export const EVALUATION_FIXTURES: EvaluationFixture[] = [
       location_in_property: "kitchen",
       water_damage: "possible",
       urgency: "standard",
+      property_access: "easy access, off-street parking",
+      customer_availability: "weekday mornings",
       photo_count: 1,
       symptoms: ["drip"],
     }),

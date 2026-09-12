@@ -1,69 +1,97 @@
-import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, Bot, ClipboardCheck, Mic, ShieldCheck } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
-export default function Home() {
+const FEATURES = [
+  {
+    icon: Bot,
+    title: "AI enquiry intake",
+    text: "Gemini reads the message, the photos and the voice notes — and extracts structured job facts with sources.",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Scope readiness engine",
+    text: "Deterministic rules score every job 0–100 with a visible breakdown — no opaque model judgement.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Human-approved follow-up",
+    text: "Drafts ask the right questions. Nothing is sent until you review and approve it.",
+  },
+  {
+    icon: Mic,
+    title: "Voice field notes",
+    text: "Hands-free site notes via ElevenLabs become evidence that updates the scope and the recommendation.",
+  },
+];
+
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex min-h-dvh flex-col bg-background">
+      <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Bot className="size-4" aria-hidden />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">QuoteReady</span>
+        </div>
+        <Link href="/dashboard" className={buttonVariants({ size: "sm", variant: "ghost" })}>
+          Open workspace
+        </Link>
+      </header>
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6">
+        <section className="flex flex-col items-start gap-6 py-16 sm:py-24">
+          <p className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-success" aria-hidden />
+            Built for small residential plumbing businesses
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          <h1 className="max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
+            Every enquiry becomes a{" "}
+            <span className="text-primary">quote-ready job scope</span> — before you commit to a
+            price.
+          </h1>
+          <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            QuoteReady shows exactly what is known, missing, assumed, unsafe, or needs a site
+            inspection. So you respond faster, quote fewer jobs blind, and never waste a visit.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/dashboard" className={buttonVariants({ size: "lg" }) + " group"}>
+              Open demo workspace
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+            <p className="text-xs text-muted-foreground">
+              Three live demo jobs · no sign-up
+            </p>
+          </div>
+        </section>
+
+        <section className="grid gap-4 pb-16 sm:grid-cols-2 sm:pb-24">
+          {FEATURES.map((f) => (
+            <Card key={f.title} className="border-border/80 shadow-xs">
+              <CardContent className="flex items-start gap-4 p-5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <f.icon className="size-4.5" aria-hidden />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">{f.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{f.text}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
       </main>
+
+      <footer className="border-t py-5">
+        <p className="mx-auto max-w-6xl px-4 text-[11px] leading-relaxed text-muted-foreground sm:px-6">
+          QuoteReady provides an AI-assisted scope-readiness assessment based on supplied
+          information. It does not diagnose faults, guarantee pricing, or replace professional
+          on-site assessment. Urgent safety concerns require appropriate professional/emergency
+          action.
+        </p>
+      </footer>
     </div>
   );
 }

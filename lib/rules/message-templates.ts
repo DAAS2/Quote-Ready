@@ -1,6 +1,5 @@
 import type { MessageDraft, ScopePack } from "@/lib/ai/schemas";
 import { getTemplate } from "./job-templates";
-import { fieldIsKnown } from "./readiness";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Deterministic customer-message drafting.
@@ -79,9 +78,6 @@ function buildInfoRequest(
     photoCount < template.min_photos_for_good_evidence
       ? `\nA clear close-up photo would also help us see exactly what you're seeing.`
       : "";
-
-  const urgency = fieldIsKnown(scope.known_facts, "urgency") ? "" : "";
-  void urgency;
 
   return [
     `Hi ${name},`,

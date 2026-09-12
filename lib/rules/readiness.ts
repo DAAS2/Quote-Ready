@@ -114,7 +114,12 @@ export function calculateComponents(input: {
     evidence: scoreEvidence(input.facts, input.rawText, input.evidence, input.template),
     access: scoreAccess(input.facts),
     confirmation: scoreConfirmation(input.missingAskCount, input.evidence.some((e) => e.type === "customer_reply")),
-    risk: scoreRisk(input),
+    risk: scoreRisk({
+      riskFlags: input.riskFlags,
+      safetyFlag: input.safetyFlag,
+      waterDamage: input.facts.water_damage,
+      inspectionTriggered: input.inspectionTriggered,
+    }),
   };
 }
 
