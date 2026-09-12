@@ -1,4 +1,4 @@
-import type { JobType } from "./schemas";
+import type { JobType, ScopePack } from "./schemas";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Gemini prompts. Rules of the house:
@@ -93,3 +93,39 @@ export function buildVoiceUpdateUserPrompt(transcript: string): string {
 
 export const BRIEFING_PROMPT = (summary: string) =>
   `You are QuoteReady's pre-call assistant. Compose a SHORT spoken briefing (4-6 sentences, plain language, no jargon, no prices) from this job state. Mention the customer's name, the readiness status, the top 1-3 things to ask or check, and the recommended next step. Do not diagnose or give safety advice; if there is a safety flag, say "this one needs safety attention" and stop.\n\nJOB STATE:\n${summary}`;
+
+export const RECOMMENDATION_SYSTEM_PROMPT = `You are the recommendation writer for QuoteReady, a quote-readiness tool used by licensed trade businesses.
+
+A deterministic rules engine has already decided the recommended action type (request_information | inspection | estimate_review | safety_escalation) and whether the job is estimate-eligible. Your job is to write the HUMAN-facing wording for that decision — a short action title and a 2-3 sentence rationale the operator can read in seconds.
+
+Rules:
+1. NEVER change the action type, NEVER invent facts, NEVER add facts that are not in the scope pack, NEVER price the job.
+2. Titles: short, imperative, plain language ("Send the customer the follow-up questions", "Book a site inspection", "Review the scope and quote", "Escalate to safety process").
+3. Rationale: 2-3 sentences, first-person-plural friendly ("We still need…"), grounded ONLY in the scope pack's missing fields, risk flags, assumptions and readiness components.
+4. If safety is flagged, lead with the safety concern and keep it to one sentence — safety language wins over everything.
+5. Return ONLY valid JSON: { "title": string, "rationale": string }.`;
+
+export function buildRecommendationUserPrompt(scope: ScopePack): string {
+  return [
+    `Write the operator-facing recommendation for this job scope.`,
+    ``,
+    `SCOPE PACK (JSON):`,
+    JSON.stringify(
+      {
+        job_type: scope.job_type,
+        readiness_score: scope.readiness_score,
+        readiness_band: scope.readiness_band,
+        components: scope.components,
+        missing_fields: scope.missing_fields,
+        risk_flags: scope.risk_flags,
+        assumptions: scope.assumptions,
+        recommended_action: {
+          type: scope.recommended_action.type,
+          estimate_eligible: scope.recommended_action.estimate_eligible,
+        },
+      },
+      null,
+      2,
+    ),
+  ].join("\n");
+}

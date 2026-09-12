@@ -63,6 +63,15 @@ export async function ensureSeeded(): Promise<"supabase" | "memory" | "skipped">
           });
           const pack = buildSeedPack(seed);
           await store.updateJobFacts(jobId, pack.facts, pack, []);
+          if (seed.seed_draft) {
+            await store.addDraft(jobId, seed.seed_draft);
+          }
+          await store.addAudit(jobId, {
+            actor_type: "user",
+            event_type: "enquiry_received",
+            summary: `Enquiry received from ${seed.customer.full_name} (${seed.image_paths.length} photo${seed.image_paths.length === 1 ? "" : "s"}).`,
+            metadata: {},
+          });
           await store.addAudit(jobId, {
             actor_type: "ai",
             event_type: "analysis_completed",

@@ -82,13 +82,14 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.db
       .from("jobs")
       .select(
-        `id, job_type, intake_channel, status, readiness_score, safety_flag, created_at, updated_at,
-         customers!inner (full_name, suburb)`,
+        `id, job_type, intake_channel, status, readiness_score, safety_flag, created_at, updated_at, enquiry_text, extracted_facts,
+         customers!inner (full_name, phone, suburb)`,
       )
       .order("updated_at", { ascending: false });
     if (error) throw error;
     return data.map((row) => {
       const c = Array.isArray(row.customers) ? row.customers[0] : row.customers;
+      const facts = (row.extracted_facts ?? {}) as Record<string, unknown>;
       return {
         id: row.id,
         customer: {
@@ -103,6 +104,14 @@ export class SupabaseStore implements Store {
         suburb: c.suburb,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        enquiry_text: row.enquiry_text ?? null,
+        phone: c.phone ?? null,
+        photo_count:
+          typeof facts.photo_count === "number" ? facts.photo_count : null,
+        voice_note_count:
+          typeof facts.voice_note_count === "number"
+            ? facts.voice_note_count
+            : null,
       };
     });
   }

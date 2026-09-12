@@ -98,7 +98,19 @@ function ensureSeed(): void {
           created_at: created,
         },
       ],
-      drafts: [],
+      drafts: seed.seed_draft
+        ? [
+            {
+              id: crypto.randomUUID(),
+              message_type: seed.seed_draft.message_type,
+              body: seed.seed_draft.body,
+              requests_fields: seed.seed_draft.requests_fields,
+              status: "draft" as const,
+              created_at: created,
+              approved_at: null,
+            },
+          ]
+        : [],
     };
     jobs.set(id, job);
   }
@@ -299,9 +311,16 @@ function toListItem(job: MemJob): JobListItem {
     status: job.status,
     readiness_score: job.readiness_score,
     safety_flag: job.safety_flag,
+    inspection_recommended: job.inspection_recommended,
     suburb: job.customer.suburb ?? null,
     updated_at: job.updated_at,
     created_at: job.created_at,
+    enquiry_text: job.enquiry_text,
+    phone: job.customer.phone ?? null,
+    photo_count: job.extracted_facts.photo_count ?? job.image_paths.length,
+    voice_note_count: job.extracted_facts.voice_note_count,
+    missing_hint: job.scope?.missing_fields[0]?.label ?? null,
+    ready_note: job.extracted_facts.notes[0] ?? null,
   };
 }
 

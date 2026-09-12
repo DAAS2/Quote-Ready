@@ -1,8 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import {
   GeminiAnalysisSchema,
   VoiceUpdateSchema,
   type GeminiAnalysis,
+  type ScopePack,
   type VoiceUpdate,
 } from "./schemas";
 import {
@@ -10,6 +12,8 @@ import {
   VOICE_UPDATE_SYSTEM_PROMPT,
   buildExtractionUserPrompt,
   buildVoiceUpdateUserPrompt,
+  RECOMMENDATION_SYSTEM_PROMPT,
+  buildRecommendationUserPrompt,
 } from "./prompts";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -193,6 +197,57 @@ export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdat
   if (!parsed.success) {
     throw new GeminiError(
       `Voice update failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      "schema",
+    );
+  }
+  return parsed.data;
+}
+
+/* ── Human-facing recommended-action wording (AI, rules stay authoritative) ── */
+
+const RecommendationSchema = z.object({
+  title: z.string().min(1).max(160),
+  rationale: z.string().min(1).max(600),
+});
+
+export async function writeRecommendation(scope: ScopePack): Promise<{
+  title: string;
+  rationale: string;
+}> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: buildRecommendationUserPrompt(scope) }] }],
+      config: {
+        systemInstruction: RECOMMENDATION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.4,
+        maxOutputTokens: 1024,
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(stripToFence(text));
+  } catch {
+    throw new GeminiError("Gemini response was not valid JSON", "invalid_json");
+  }
+
+  const parsed = RecommendationSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new GeminiError(
+      `Recommendation failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
       "schema",
     );
   }

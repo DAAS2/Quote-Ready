@@ -1,5 +1,5 @@
-import { GeminiAnalysisSchema, type EvidenceItem, type GeminiAnalysis, type JobFacts } from "@/lib/ai/schemas";
-import { extractJobFacts, GEMINI_CONFIGURED } from "@/lib/ai/gemini";
+import { GeminiAnalysisSchema, type EvidenceItem, type GeminiAnalysis, type JobFacts, type ScopePack } from "@/lib/ai/schemas";
+import { extractJobFacts, GEMINI_CONFIGURED, writeRecommendation } from "@/lib/ai/gemini";
 import { buildFallbackAnalysis } from "@/lib/ai/fallbacks";
 import { buildScopePack } from "@/lib/rules/engine";
 import { store } from "@/lib/data/jobs";
@@ -139,6 +139,29 @@ export async function apply_job_template_rules_and_score(
   return { scope, override_reasons: scope.override_reasons };
 }
 
+export async function generate_recommendation_with_ai(
+  state: WorkflowStateType,
+): Promise<Partial<WorkflowStateType>> {
+  if (!state.scope || state.validation_error) return {};
+  // Rules decide the action type; AI only words it. Skip in demo/fallback mode.
+  if (isDemoMode() || !GEMINI_CONFIGURED || state.used_fallback) return {};
+  try {
+    const { title, rationale } = await writeRecommendation(state.scope);
+    const scope: ScopePack = {
+      ...state.scope,
+      recommended_action: {
+        ...state.scope.recommended_action,
+        title,
+        rationale,
+      },
+    };
+    return { scope, recommendation_ai: true };
+  } catch (error) {
+    console.warn("[QuoteReady] AI recommendation failed, keeping rules wording:", (error as Error).message);
+    return {};
+  }
+}
+
 export async function persist_analysis(
   state: WorkflowStateType,
 ): Promise<Partial<WorkflowStateType>> {
@@ -176,6 +199,7 @@ export async function persist_analysis(
       produced_by: state.scope.produced_by,
       confidence: state.confidence,
       validation_error: state.validation_error,
+      recommendation_ai: state.recommendation_ai,
     },
   });
   return {};

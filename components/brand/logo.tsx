@@ -1,72 +1,83 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * QuoteReady brand mark — a rounded "scope sheet" with a checkmark formed
- * by the readiness needle. Used everywhere the brand appears.
+ * QuoteReady brand logo — transcribed 1:1 from the brand logo design
+ * (designs/.../quoteready_brand_logo/code.html).
+ * `tone="dark"` renders the white wordmark (for the navy sidebar / CTA),
+ * `tone="light"` swaps the wordmark to navy so it reads on white surfaces.
  */
-export function LogoMark({
+export function BrandLogoSvg({
   className,
-  size = "md",
+  tone = "dark",
+  wordmark = true,
 }: {
   className?: string;
-  size?: "sm" | "md" | "lg";
+  tone?: "dark" | "light";
+  /** false renders the logo mark only (the wordmark text is provided separately) */
+  wordmark?: boolean;
 }) {
-  const box = size === "lg" ? "size-10" : size === "sm" ? "size-6" : "size-8";
-  const inner = size === "lg" ? "size-5" : size === "sm" ? "size-3" : "size-4";
   return (
-    <span
-      className={cn(
-        "relative inline-flex shrink-0 items-center justify-center rounded-[30%] bg-gradient-to-br from-primary via-[oklch(0.62_0.17_245)] to-[oklch(0.646_0.194_41.1)] text-primary-foreground shadow-[0_4px_14px_-4px_rgb(37_64_233/0.55),inset_0_1px_0_rgb(255_255_255/0.25)]",
-        box,
-        className,
-      )}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox={wordmark ? "0 0 160 40" : "0 0 40 40"}
+      fill="none"
+      className={cn("h-8 w-auto object-contain", className)}
       aria-hidden
     >
-      <svg
-        viewBox="0 0 24 24"
-        className={inner}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
+      <rect x="2" y="4" width="32" height="32" rx="8" fill="#0F766E" />
+      <path
+        d="M12 21L16 25L24 15"
+        stroke="#FFFFFF"
+        strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-      >
-        <path d="M3 6.5h13.5" opacity="0.55" />
-        <path d="M3 12h18" opacity="0.8" />
-        <path d="M3 17.5h9.5" opacity="0.55" />
-        <path d="M16.5 15.5 19 18l4.5-5" transform="translate(-2.5,-1)" />
-        <circle cx="20.5" cy="13.25" r="4.75" opacity="0.35" transform="translate(-2.5,-1)" />
-      </svg>
-    </span>
+      />
+      <path
+        d="M22 11H25C26.1046 11 27 11.8954 27 13V27C27 28.1046 26.1046 29 25 29H11C9.89543 29 9 28.1046 9 27V13C9 11.8954 9.89543 11 11 11H14"
+        stroke="#A7F3D0"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+      {wordmark && (
+        <text
+          x="42"
+          y="25"
+          fontFamily="Inter, -apple-system, sans-serif"
+          fontSize="18"
+          fontWeight="700"
+          fill={tone === "dark" ? "#FFFFFF" : "#102A43"}
+          letterSpacing="-0.02em"
+        >
+          Quote
+          <tspan fill="#38BDF8">Ready</tspan>
+        </text>
+      )}
+    </svg>
   );
 }
 
 export function Logo({
   className,
-  markSize = "md",
   href = "/",
+  tone = "light",
 }: {
   className?: string;
-  markSize?: "sm" | "md" | "lg";
   href?: string;
+  tone?: "dark" | "light";
 }) {
   return (
-    <a
+    <Link
       href={href}
       className={cn(
-        "group inline-flex items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-ring/60",
+        "inline-flex items-center gap-space-sm rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         className,
       )}
     >
-      <LogoMark size={markSize} />
-      <span className="flex flex-col leading-none">
-        <span className="text-[15px] font-semibold tracking-tight">
-          QuoteReady
-        </span>
-        <span className="mt-0.5 hidden text-[10px] font-medium tracking-wide text-muted-foreground sm:block">
-          Scope before you price
-        </span>
+      <BrandLogoSvg tone={tone} />
+      <span className="font-headline-sm text-headline-sm tracking-tight">
+        QuoteReady
       </span>
-    </a>
+    </Link>
   );
 }

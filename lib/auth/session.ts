@@ -23,11 +23,11 @@ export function useSession(): {
   useEffect(() => {
     const sb = getBrowserSupabase();
     if (!sb) {
-      setLoading(false);
+      void Promise.resolve().then(() => setLoading(false));
       return;
     }
     let mounted = true;
-    sb.auth.getSession().then(({ data }) => {
+    void sb.auth.getSession().then(({ data }) => {
       if (mounted) {
         setSession(data.session);
         setLoading(false);

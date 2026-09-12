@@ -36,11 +36,22 @@ export function seedStatusFor(seed: DemoJobSeed) {
   return deriveAnalysisStatus(pack);
 }
 
-/** Hours ago each demo job was created, for a realistic dashboard. */
+/** Hours ago each demo job was created, for a realistic dashboard
+ *  (mirrors the triage design's recency column: 18m, 42m, 1h, 2h, 3h …). */
 export const SEED_AGE_HOURS: Record<DemoJobSeed["ref"], number> = {
-  job_a: 2,
-  job_b: 27,
-  job_c: 4,
+  job_a: 0.3,
+  job_b: 0.7,
+  job_c: 1.2,
+  job_d: 2.1,
+  job_e: 3.2,
+  job_f: 4.1,
+  job_g: 5.3,
+  job_h: 6.4,
+  job_i: 8,
+  job_j: 20,
+  job_k: 22,
+  job_l: 24.5,
+  job_m: 26.3,
 };
 
 export function makeStoreKindLabel(store: Store): string {

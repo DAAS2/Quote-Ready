@@ -59,6 +59,11 @@ export const WorkflowState = Annotation.Root({
     reducer: (_a, b) => b,
     default: () => [],
   }),
+  /** true when the AI wrote the recommendation wording (rules still decide the type) */
+  recommendation_ai: Annotation<boolean>({
+    reducer: (_a, b) => b,
+    default: () => false,
+  }),
 
   /** diagnostics for audit */
   validation_error: Annotation<string | null>({

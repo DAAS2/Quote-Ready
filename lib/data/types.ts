@@ -45,9 +45,17 @@ export interface JobListItem {
   status: JobStatus;
   readiness_score: number | null;
   safety_flag: boolean;
+  inspection_recommended?: boolean | null;
   suburb?: string | null;
   updated_at: string;
   created_at: string;
+  /** optional denormalised fields for triage-table rendering (memory store fills these) */
+  enquiry_text?: string | null;
+  phone?: string | null;
+  photo_count?: number | null;
+  voice_note_count?: number | null;
+  missing_hint?: string | null;
+  ready_note?: string | null;
 }
 
 export interface JobDetail extends JobListItem {
