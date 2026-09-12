@@ -10,7 +10,8 @@ import { BandExplainer, ReadinessMeter, bandTone } from "@/components/shared/rea
 import { AuditTimeline } from "@/components/scope/audit-timeline";
 import { AnalysePanel } from "@/components/jobs/analyse-panel";
 import { ActionButtons } from "@/components/scope/action-buttons";
-import { DraftsList } from "@/components/scope/drafts-list";
+import { DraftManager } from "@/components/scope/draft-manager";
+import { EnquiryEditor } from "@/components/scope/enquiry-editor";
 import { VersionHistory } from "@/components/scope/version-history";
 import { VoiceNotePanel } from "@/components/voice/voice-note-panel";
 import { BriefingPlayer } from "@/components/voice/briefing-player";
@@ -59,9 +60,10 @@ export default async function JobDetailPage({
               <span className="text-sm text-muted-foreground">{job.customer.suburb}</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <JobTypeBadge label={JOB_TYPE_LABELS[job.job_type]} />
             <StatusBadge status={job.status} safetyFlag={job.safety_flag} />
+            <EnquiryEditor jobId={job.id} initialText={job.enquiry_text ?? ""} />
           </div>
         </div>
       </div>
@@ -162,7 +164,7 @@ export default async function JobDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <DraftsList drafts={job.drafts} />
+                <DraftManager jobId={job.id} drafts={job.drafts} />
               </CardContent>
             </Card>
           </div>

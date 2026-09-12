@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, CircleCheck, TriangleAlert } from "lucide-react";
+import { Camera, CircleCheck, ListChecks, TriangleAlert } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { EvidenceList } from "@/components/evidence/evidence-list";
@@ -76,16 +76,17 @@ export function ScopeTabs({
         className="h-auto w-full min-w-0 justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {[
-          { key: "known", label: `Known details`, count: known.length },
-          { key: "missing", label: "Missing", count: missing.length },
-          { key: "evidence", label: "Evidence", count: evidence.length },
-          { key: "assumptions", label: "Assumptions", count: scope.assumptions.length + scope.exclusions.length },
+          { key: "known", label: "Known", count: known.length, icon: CircleCheck },
+          { key: "missing", label: "Missing", count: missing.length, icon: TriangleAlert },
+          { key: "evidence", label: "Evidence", count: evidence.length, icon: Camera },
+          { key: "assumptions", label: "Assumptions", count: scope.assumptions.length + scope.exclusions.length, icon: ListChecks },
         ].map((t) => (
           <TabsTrigger
             key={t.key}
             value={t.key}
             className="relative shrink-0 whitespace-nowrap rounded-none border-0 px-3.5 py-2.5 text-[13px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground aria-selected:text-foreground"
           >
+            <t.icon className="mr-1.5 size-3.5" aria-hidden />
             {t.label}
             <span className="ml-1.5 font-mono text-[11px] tabular-nums text-muted-foreground/70">
               {t.count}
@@ -96,6 +97,9 @@ export function ScopeTabs({
 
       {/* ── known ── */}
       <TabsContent value="known" className="mt-5">
+        <p className="mb-3 text-xs text-muted-foreground">
+          Facts established from the enquiry, photos and field notes — each traceable to evidence.
+        </p>
         {known.length === 0 ? (
           <p className="text-sm text-muted-foreground">No details established yet.</p>
         ) : (
@@ -123,6 +127,10 @@ export function ScopeTabs({
 
       {/* ── missing ── */}
       <TabsContent value="missing" className="mt-5">
+        <p className="mb-3 text-xs text-muted-foreground">
+          What a plumber still needs before a responsible fixed price — ask the customer for the
+          highlighted items.
+        </p>
         {missing.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-success">
             <CircleCheck className="size-4" aria-hidden />
@@ -159,6 +167,10 @@ export function ScopeTabs({
 
       {/* ── evidence ── */}
       <TabsContent value="evidence" className="mt-5">
+        <p className="mb-3 text-xs text-muted-foreground">
+          Every claim QuoteReady uses, tied to its source — customer text, photos, voice notes or
+          the operator. Add more with “Update enquiry”.
+        </p>
         <div className="space-y-4">
           {imagePaths.length > 0 && (
             <div className="flex flex-wrap gap-2">

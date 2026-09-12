@@ -5,7 +5,6 @@ import {
   type JobType,
   type MissingField,
   type RecommendedAction,
-  type RiskFlag,
   type ScopePack,
 } from "@/lib/ai/schemas";
 import { getTemplate } from "./job-templates";

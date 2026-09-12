@@ -49,6 +49,7 @@ export class SupabaseStore implements Store {
         customer_id: customerId,
         job_type: input.job_type,
         status: "new",
+        intake_channel: input.intake_channel ?? "text",
         enquiry_text: input.enquiry_text,
         extracted_facts: {},
       })
@@ -81,7 +82,7 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.db
       .from("jobs")
       .select(
-        `id, job_type, status, readiness_score, safety_flag, created_at, updated_at,
+        `id, job_type, intake_channel, status, readiness_score, safety_flag, created_at, updated_at,
          customers!inner (full_name, suburb)`,
       )
       .order("updated_at", { ascending: false });
@@ -95,6 +96,7 @@ export class SupabaseStore implements Store {
           suburb: c.suburb,
         },
         job_type: row.job_type,
+        intake_channel: row.intake_channel ?? null,
         status: row.status,
         readiness_score: row.readiness_score,
         safety_flag: row.safety_flag,
@@ -151,6 +153,7 @@ export class SupabaseStore implements Store {
         suburb: c.suburb,
       },
       job_type: data.job_type,
+      intake_channel: data.intake_channel ?? null,
       status: data.status,
       readiness_score: data.readiness_score,
       safety_flag: data.safety_flag,
@@ -232,6 +235,14 @@ export class SupabaseStore implements Store {
     if (error) throw error;
   }
 
+  async updateEnquiryText(id: string, enquiryText: string): Promise<void> {
+    const { error } = await this.db
+      .from("jobs")
+      .update({ enquiry_text: enquiryText })
+      .eq("id", id);
+    if (error) throw error;
+  }
+
   async setJobStatus(jobId: string, status: JobStatus): Promise<void> {
     const { error } = await this.db
       .from("jobs")
@@ -257,6 +268,16 @@ export class SupabaseStore implements Store {
       .single();
     if (error) throw error;
     return data.id;
+  }
+
+  async updateDraftBody(jobId: string, draftId: string, body: string): Promise<void> {
+    const { error } = await this.db
+      .from("message_drafts")
+      .update({ body })
+      .eq("id", draftId)
+      .eq("job_id", jobId)
+      .eq("status", "draft");
+    if (error) throw error;
   }
 
   async approveDraft(jobId: string, draftId: string, body?: string): Promise<void> {

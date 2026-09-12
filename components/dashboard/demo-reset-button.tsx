@@ -35,10 +35,11 @@ export function DemoResetButton() {
       size="sm"
       onClick={reset}
       disabled={resetting}
+      className="text-muted-foreground"
       title="Reset the workspace to the seeded demo jobs"
     >
       <RefreshCcw className={`size-3.5 ${resetting ? "animate-spin" : ""}`} aria-hidden />
-      <span className="hidden sm:inline">Reset demo</span>
+      <span className="hidden md:inline">Reset demo</span>
     </Button>
   );
 }

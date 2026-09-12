@@ -234,6 +234,43 @@
   mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 30%, transparent 75%);
 }
 
+/* Aurora hero backdrop — layered animated gradient waves (CSS-only, GPU-cheap) */
+.qr-aurora {
+  background:
+    radial-gradient(60% 55% at 12% 8%, oklch(0.546 0.215 262.9 / 0.16), transparent 62%),
+    radial-gradient(50% 48% at 88% 14%, oklch(0.62 0.17 245 / 0.13), transparent 60%),
+    radial-gradient(55% 60% at 70% 92%, oklch(0.646 0.194 41.1 / 0.09), transparent 62%),
+    radial-gradient(42% 40% at 28% 88%, oklch(0.6 0.152 246.8 / 0.1), transparent 58%),
+    linear-gradient(180deg, oklch(0.985 0.002 247.8), oklch(0.968 0.007 247.9));
+}
+.qr-aurora::before,
+.qr-aurora::after {
+  content: "";
+  position: absolute;
+  inset: -30% -20%;
+  background: conic-gradient(
+    from 210deg at 42% 38%,
+    transparent 0deg,
+    oklch(0.546 0.215 262.9 / 0.05) 70deg,
+    transparent 140deg,
+    oklch(0.62 0.17 245 / 0.05) 210deg,
+    transparent 280deg
+  );
+  filter: blur(60px);
+  animation: qr-aurora-spin 38s linear infinite;
+}
+.qr-aurora::after {
+  inset: -40% -30%;
+  animation-direction: reverse;
+  animation-duration: 52s;
+  opacity: 0.7;
+}
+
+@keyframes qr-aurora-spin {
+  from { transform: rotate(0deg) scale(1); }
+  to { transform: rotate(360deg) scale(1.15); }
+}
+
 .qr-text-gradient {
   background: linear-gradient(100deg, oklch(0.546 0.215 262.9), oklch(0.62 0.17 245), oklch(0.646 0.194 41.1));
   -webkit-background-clip: text;
@@ -247,7 +284,9 @@
   .qr-anim-pulse-dot,
   .qr-anim-rise,
   .qr-marquee-track,
-  .qr-bar-fill {
+  .qr-bar-fill,
+  .qr-aurora::before,
+  .qr-aurora::after {
     animation: none !important;
   }
   .qr-marquee-track {

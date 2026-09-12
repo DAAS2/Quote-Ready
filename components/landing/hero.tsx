@@ -113,8 +113,8 @@ export function Hero() {
 
   return (
     <section ref={root} className="relative overflow-hidden pt-14 pb-20 sm:pt-20 sm:pb-28">
-      {/* backdrop */}
-      <div className="qr-hero-grid absolute inset-0" aria-hidden />
+      {/* backdrop: layered aurora waves + faint grid kept only at the very top */}
+      <div className="qr-aurora absolute inset-0" aria-hidden />
       <div
         className="absolute -top-32 left-[15%] size-[480px] rounded-full bg-primary/14 blur-3xl qr-anim-float"
         style={{ animationDuration: "11s" }}
@@ -134,7 +134,7 @@ export function Hero() {
             className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-xs"
           >
             <span className="size-1.5 rounded-full bg-success qr-anim-pulse-dot" aria-hidden />
-            Built for small residential plumbing businesses
+            Turn every enquiry into a scope — before you price it
           </p>
 
           <h1

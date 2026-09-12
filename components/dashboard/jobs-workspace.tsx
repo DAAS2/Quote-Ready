@@ -1,3 +1,6 @@
+"use client";
+
+import { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CircleCheck,
@@ -17,15 +20,18 @@ import type { JobListItem } from "@/lib/data/types";
 
 type StatusKey = "all" | "needs_information" | "inspection_recommended" | "ready_for_estimate";
 
-export function JobsWorkspace({
-  jobs,
-  status,
-  q,
-}: {
-  jobs: JobListItem[];
-  status: StatusKey;
-  q: string;
-}) {
+const FILTERS: Array<{ key: StatusKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "needs_information", label: "Needs info" },
+  { key: "inspection_recommended", label: "Inspection" },
+  { key: "ready_for_estimate", label: "Ready" },
+];
+
+export function JobsWorkspace({ jobs }: { jobs: JobListItem[] }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<StatusKey>("all");
+  const deferredQuery = useDeferredValue(query);
+
   const counts: Record<StatusKey, number> = {
     all: jobs.length,
     needs_information: jobs.filter((j) => j.status === "needs_information").length,
@@ -34,17 +40,18 @@ export function JobsWorkspace({
   };
   const safetyCount = jobs.filter((j) => j.safety_flag).length;
 
-  const needle = q.trim().toLowerCase();
-  const filtered = needle
-    ? jobs.filter((j) =>
-        [
-          j.customer.full_name,
-          j.suburb ?? "",
-          JOB_TYPE_LABELS[j.job_type],
-        ].join(" ").toLowerCase().includes(needle),
-      )
-    : jobs;
-  const visible = status === "all" ? filtered : filtered.filter((j) => j.status === status);
+  const visible = useMemo(() => {
+    const needle = deferredQuery.trim().toLowerCase();
+    const filtered = needle
+      ? jobs.filter((j) =>
+          [j.customer.full_name, j.suburb ?? "", JOB_TYPE_LABELS[j.job_type]]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
+        )
+      : jobs;
+    return status === "all" ? filtered : filtered.filter((j) => j.status === status);
+  }, [jobs, deferredQuery, status]);
 
   return (
     <div className="space-y-5">
@@ -64,60 +71,80 @@ export function JobsWorkspace({
       {/* ── KPI strip ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
-          href="/dashboard"
           label="All jobs"
           count={counts.all}
           icon={Inbox}
           tone="text-foreground"
           bar="bg-primary/70"
-          active={status === "all" && !needle}
+          active={status === "all"}
+          onClick={() => setStatus("all")}
         />
         <Kpi
-          href="/dashboard?status=needs_information"
           label="Needs info"
           count={counts.needs_information}
           icon={TriangleAlert}
           tone="text-warning"
           bar="bg-warning"
           active={status === "needs_information"}
+          onClick={() => setStatus("needs_information")}
         />
         <Kpi
-          href="/dashboard?status=inspection_recommended"
           label="Inspection"
           count={counts.inspection_recommended}
           icon={Wrench}
           tone="text-inspect"
           bar="bg-inspect"
           active={status === "inspection_recommended"}
+          onClick={() => setStatus("inspection_recommended")}
         />
         <Kpi
-          href="/dashboard?status=ready_for_estimate"
           label="Ready"
           count={counts.ready_for_estimate}
           icon={CircleCheck}
           tone="text-success"
           bar="bg-success"
           active={status === "ready_for_estimate"}
+          onClick={() => setStatus("ready_for_estimate")}
         />
       </div>
 
-      {/* ── toolbar: search ── */}
-      <form action="/dashboard" method="get" className="relative max-w-sm">
-        {status !== "all" && <input type="hidden" name="status" value={status} />}
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder="Search customer, suburb, job type…"
-          className="pl-8"
-          aria-label="Search jobs"
-        />
-      </form>
+      {/* ── toolbar: instant search + filters ── */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search customer, suburb, job type…"
+            className="pl-8"
+            aria-label="Search jobs"
+          />
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border bg-card p-0.5" role="group" aria-label="Filter by status">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setStatus(f.key)}
+              aria-pressed={status === f.key}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60",
+                status === f.key
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f.label}
+              <span className="font-mono text-[11px] tabular-nums opacity-70">{counts[f.key]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* ── list ── */}
       {visible.length === 0 ? (
-        <EmptyJobs filtered={Boolean(needle) || status !== "all"} />
+        <EmptyJobs filtered={Boolean(deferredQuery.trim()) || status !== "all"} />
       ) : (
         <>
           {/* desktop table */}
@@ -134,8 +161,8 @@ export function JobsWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((job, i) => (
-                  <JobRow key={job.id} job={job} index={i} />
+                {visible.map((job) => (
+                  <JobRow key={job.id} job={job} />
                 ))}
               </tbody>
             </table>
@@ -143,8 +170,8 @@ export function JobsWorkspace({
 
           {/* mobile cards */}
           <div className="space-y-2.5 md:hidden">
-            {visible.map((job, i) => (
-              <JobCard key={job.id} job={job} index={i} />
+            {visible.map((job) => (
+              <JobCard key={job.id} job={job} />
             ))}
           </div>
         </>
@@ -156,55 +183,50 @@ export function JobsWorkspace({
 /* ── KPI card ─────────────────────────────────────────────────────────────── */
 
 function Kpi({
-  href,
   label,
   count,
   icon: Icon,
   tone,
   bar,
   active,
+  onClick,
 }: {
-  href: string;
   label: string;
   count: number;
   icon: React.ComponentType<{ className?: string }>;
   tone: string;
   bar: string;
   active: boolean;
+  onClick: () => void;
 }) {
   const total = Math.max(count, 1);
   return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "group relative overflow-hidden rounded-lg border bg-card px-4 py-3 transition-all duration-200 hover:border-primary/35 hover:shadow-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60",
+        "group relative overflow-hidden rounded-lg border bg-card px-4 py-3 text-left transition-all duration-200 hover:border-primary/35 hover:shadow-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60",
         active && "border-primary/50 ring-1 ring-primary/25",
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className={cn("size-4", tone)} aria-hidden />
+        <Icon className={cn("size-4 transition-transform duration-200 group-hover:scale-110", tone)} aria-hidden />
       </div>
       <p className={cn("mt-1.5 font-mono text-2xl font-semibold tabular-nums", tone)}>{count}</p>
       <div className="mt-2 h-1 overflow-hidden rounded-full bg-secondary">
-        <div
-          className={cn("h-full rounded-full transition-all duration-500", bar)}
-          style={{ width: `${(count / total) * 100}%` }}
-        />
+        <div className={cn("h-full rounded-full transition-all duration-500", bar)} style={{ width: `${(count / total) * 100}%` }} />
       </div>
-    </Link>
+    </button>
   );
 }
 
 /* ── desktop table row ────────────────────────────────────────────────────── */
 
-function JobRow({ job, index }: { job: JobListItem; index: number }) {
+function JobRow({ job }: { job: JobListItem }) {
   return (
-    <tr
-      className="group relative border-b transition-colors last:border-0 hover:bg-accent/40"
-      style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
-    >
+    <tr className="group relative border-b transition-colors last:border-0 hover:bg-accent/40">
       <td className="px-4 py-3">
         <a
           href={`/jobs/${job.id}`}
@@ -223,10 +245,25 @@ function JobRow({ job, index }: { job: JobListItem; index: number }) {
       </td>
       <td className="px-4 py-3 text-[13px] text-muted-foreground">{JOB_TYPE_LABELS[job.job_type]}</td>
       <td className="px-4 py-3">
-        <StatusCell job={job} />
+        <StatusBadge status={job.status} safetyFlag={job.safety_flag} />
       </td>
       <td className="px-4 py-3">
-        <ReadinessCell score={job.readiness_score} />
+        <div className="flex w-32 items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+            {typeof job.readiness_score === "number" && (
+              <div
+                className={cn(
+                  "qr-bar-fill h-full rounded-full",
+                  job.readiness_score >= 70 ? "bg-success" : job.readiness_score >= 40 ? "bg-inspect" : "bg-warning",
+                )}
+                style={{ width: `${job.readiness_score}%` }}
+              />
+            )}
+          </div>
+          <span className="w-8 text-right font-mono text-xs tabular-nums text-muted-foreground">
+            {typeof job.readiness_score === "number" ? `${job.readiness_score}%` : "—"}
+          </span>
+        </div>
       </td>
       <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-muted-foreground">
         {relativeTime(job.updated_at)}
@@ -237,36 +274,5 @@ function JobRow({ job, index }: { job: JobListItem; index: number }) {
         </svg>
       </td>
     </tr>
-  );
-}
-
-function StatusCell({ job }: { job: JobListItem }) {
-  return <StatusBadge status={job.status} safetyFlag={job.safety_flag} />;
-}
-
-function ReadinessCell({ score }: { score: number | null }) {
-  return (
-    <div className="flex w-32 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-        {typeof score === "number" && (
-          <div
-            className={cn(
-              "qr-bar-fill h-full rounded-full",
-              typeof score === "number"
-                ? score >= 70
-                  ? "bg-success"
-                  : score >= 40
-                    ? "bg-inspect"
-                    : "bg-warning"
-                : "bg-muted-foreground/40",
-            )}
-            style={{ width: `${score}%` }}
-          />
-        )}
-      </div>
-      <span className="w-8 text-right font-mono text-xs tabular-nums text-muted-foreground">
-        {typeof score === "number" ? `${score}%` : "—"}
-      </span>
-    </div>
   );
 }

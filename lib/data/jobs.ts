@@ -96,6 +96,8 @@ export const store = {
     withFallback((s) => s.createJob(input)),
   updateJobFacts: (...args: Parameters<Store["updateJobFacts"]>) =>
     withFallback((s) => s.updateJobFacts(...args)),
+  updateEnquiryText: (id: string, enquiryText: string) =>
+    withFallback((s) => s.updateEnquiryText(id, enquiryText)),
   addEvidence: (...args: Parameters<Store["addEvidence"]>) =>
     withFallback((s) => s.addEvidence(...args)),
   setJobStatus: (...args: Parameters<Store["setJobStatus"]>) =>
@@ -104,6 +106,8 @@ export const store = {
     withFallback((s) => s.addDraft(...args)),
   approveDraft: (...args: Parameters<Store["approveDraft"]>) =>
     withFallback((s) => s.approveDraft(...args)),
+  updateDraftBody: (...args: Parameters<Store["updateDraftBody"]>) =>
+    withFallback((s) => s.updateDraftBody(...args)),
   addAudit: (...args: Parameters<Store["addAudit"]>) =>
     withFallback((s) => s.addAudit(...args)),
   listAudits: (id: string) => withFallback((s) => s.listAudits(id)),

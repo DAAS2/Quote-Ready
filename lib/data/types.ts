@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   EvidenceItem,
   JobFacts,
+  IntakeChannel,
   JobStatus,
   JobType,
   MessageType,
@@ -40,6 +41,7 @@ export interface JobListItem {
   id: string;
   customer: CustomerRecord;
   job_type: JobType;
+  intake_channel?: IntakeChannel | null;
   status: JobStatus;
   readiness_score: number | null;
   safety_flag: boolean;
@@ -66,6 +68,7 @@ export interface CreateJobInput {
   job_type: JobType;
   enquiry_text: string;
   image_paths: string[];
+  intake_channel?: IntakeChannel;
 }
 
 export interface AuditInsert {
@@ -86,6 +89,7 @@ export interface Store {
     pack: ScopePack,
     imagePaths: string[],
   ): Promise<void>;
+  updateEnquiryText(id: string, enquiryText: string): Promise<void>;
   addEvidence(jobId: string, items: EvidenceRow[]): Promise<void>;
   setJobStatus(jobId: string, status: JobStatus): Promise<void>;
   addDraft(
@@ -93,6 +97,7 @@ export interface Store {
     draft: { message_type: MessageType; body: string; requests_fields: string[] },
   ): Promise<string>;
   approveDraft(jobId: string, draftId: string, body?: string): Promise<void>;
+  updateDraftBody(jobId: string, draftId: string, body: string): Promise<void>;
   addAudit(jobId: string, event: AuditInsert): Promise<void>;
   listAudits(jobId: string): Promise<AuditRow[]>;
   resetDemo(): Promise<void>;

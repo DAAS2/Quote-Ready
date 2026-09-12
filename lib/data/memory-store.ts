@@ -27,6 +27,7 @@ interface MemJob {
   safety_flag: boolean;
   inspection_recommended: boolean;
   enquiry_text: string | null;
+  intake_channel?: string | null;
   extracted_facts: JobFacts;
   created_at: string;
   updated_at: string;
@@ -71,6 +72,7 @@ function ensureSeed(): void {
       safety_flag: pack.safety_flag,
       inspection_recommended: pack.inspection_recommended,
       enquiry_text: seed.enquiry_text,
+      intake_channel: "text",
       extracted_facts: pack.facts,
       created_at: created,
       updated_at: created,
@@ -119,6 +121,7 @@ export class MemoryStore implements Store {
     return {
       ...toListItem(job),
       enquiry_text: job.enquiry_text,
+      intake_channel: job.intake_channel as never ?? null,
       extracted_facts: job.extracted_facts,
       scope: job.scope,
       scope_version: job.scope?.version ?? null,
@@ -143,6 +146,7 @@ export class MemoryStore implements Store {
       safety_flag: false,
       inspection_recommended: false,
       enquiry_text: input.enquiry_text,
+      intake_channel: input.intake_channel ?? "text",
       extracted_facts: { symptoms: [], photo_count: input.image_paths.length, voice_note_count: 0, notes: [] },
       created_at: ts,
       updated_at: ts,
@@ -208,6 +212,13 @@ export class MemoryStore implements Store {
     job.updated_at = nowIso();
   }
 
+  async updateEnquiryText(id: string, enquiryText: string): Promise<void> {
+    const job = jobs.get(id);
+    if (!job) return;
+    job.enquiry_text = enquiryText;
+    job.updated_at = nowIso();
+  }
+
   async setJobStatus(jobId: string, status: JobStatus): Promise<void> {
     const job = jobs.get(jobId);
     if (!job) return;
@@ -232,6 +243,15 @@ export class MemoryStore implements Store {
       approved_at: null,
     });
     return id;
+  }
+
+  async updateDraftBody(jobId: string, draftId: string, body: string): Promise<void> {
+    const job = jobs.get(jobId);
+    const d = job?.drafts.find((x) => x.id === draftId);
+    if (d && d.status === "draft") {
+      d.body = body;
+      job!.updated_at = nowIso();
+    }
   }
 
   async approveDraft(jobId: string, draftId: string, body?: string): Promise<void> {

@@ -193,6 +193,40 @@ export function Features() {
             scrollTrigger: { trigger: root.current, start: "top 78%", once: true },
           },
         );
+
+        // live demo card: continuous cycling of "job → status" states
+        const states = [
+          { label: "Jordan's leaking tap", status: "Inspection recommended", tone: "text-inspect", score: 62 },
+          { label: "Priya's toilet swap", status: "Ready for estimate", tone: "text-success", score: 90 },
+          { label: "Sam's hot-water unit", status: "Safety attention", tone: "text-safety", score: 47 },
+        ];
+        const card = root.current?.querySelector("[data-live-demo]");
+        if (!card) return;
+        const labelEl = card.querySelector("[data-live-label]");
+        const statusEl = card.querySelector("[data-live-status]");
+        const scoreEl = card.querySelector("[data-live-score]");
+        const barEl = card.querySelector("[data-live-bar]");
+        let idx = 0;
+        const cycle = () => {
+          const s = states[idx];
+          idx = (idx + 1) % states.length;
+          const tl = gsap.timeline();
+          tl.to([labelEl, statusEl, scoreEl, barEl], {
+            opacity: 0, y: -6, duration: 0.25, stagger: 0.03, ease: "power2.in",
+          })
+            .add(() => {
+              labelEl!.textContent = s.label;
+              statusEl!.textContent = s.status;
+              statusEl!.className = `text-sm font-semibold ${s.tone}`;
+              (barEl as HTMLElement)!.style.width = `${s.score}%`;
+              scoreEl!.textContent = `${s.score}%`;
+            })
+            .to([labelEl, statusEl, scoreEl, barEl], {
+              opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: "power2.out",
+            });
+        };
+        const timer = setInterval(cycle, 2800);
+        return () => clearInterval(timer);
       });
     },
     { scope: root },
@@ -202,7 +236,7 @@ export function Features() {
     <section ref={root} className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p data-fx className="text-xs font-semibold uppercase tracking-widest text-primary">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             The product
           </p>
           <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -218,7 +252,7 @@ export function Features() {
         </Link>
       </div>
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2">
+      <div className="mt-10 grid gap-4 lg:grid-cols-3">
         {FEATURES.map((f) => (
           <div
             key={f.title}
@@ -229,13 +263,52 @@ export function Features() {
               className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-primary/5 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100"
               aria-hidden
             />
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
               <f.icon className="size-5" aria-hidden />
             </span>
             <h3 className="mt-4 text-base font-semibold">{f.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.text}</p>
           </div>
         ))}
+
+        {/* live demo card — cycles real job outcomes */}
+        <div
+          data-feature-card
+          data-live-demo
+          className="relative overflow-hidden rounded-xl border border-primary/25 bg-primary/[0.04] p-6"
+        >
+          <div
+            className="pointer-events-none absolute -left-12 -bottom-12 size-40 rounded-full bg-primary/10 blur-3xl"
+            aria-hidden
+          />
+          <p className="text-[11px] font-medium uppercase tracking-widest text-primary">
+            Live · every 3s
+          </p>
+          <div className="mt-4 space-y-3">
+            <p data-live-label className="text-sm font-semibold">
+              Jordan&apos;s leaking tap
+            </p>
+            <p data-live-status className="text-sm font-semibold text-inspect">
+              Inspection recommended
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                <div
+                  data-live-bar
+                  className="h-full rounded-full bg-inspect transition-all duration-500"
+                  style={{ width: "62%" }}
+                />
+              </div>
+              <span data-live-score className="w-10 text-right font-mono text-sm font-semibold tabular-nums text-inspect">
+                62%
+              </span>
+            </div>
+          </div>
+          <p className="mt-4 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-success qr-anim-pulse-dot" aria-hidden />
+            Real outputs from the deterministic engine
+          </p>
+        </div>
       </div>
     </section>
   );

@@ -36,6 +36,24 @@ export const JobStatusEnum = z.enum([
 ]);
 export type JobStatus = z.infer<typeof JobStatusEnum>;
 
+/** How the enquiry reached the business. */
+export const IntakeChannelEnum = z.enum([
+  "text",
+  "call",
+  "web_form",
+  "email",
+  "in_person",
+]);
+export type IntakeChannel = z.infer<typeof IntakeChannelEnum>;
+
+export const INTAKE_CHANNEL_LABELS: Record<IntakeChannel, string> = {
+  text: "Text / SMS",
+  call: "Phone call",
+  web_form: "Web form",
+  email: "Email",
+  in_person: "In person",
+};
+
 export const ReadinessBandEnum = z.enum([
   "needs_information",
   "inspection_recommended",
