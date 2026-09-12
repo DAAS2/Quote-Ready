@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wrench } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { DemoResetButton } from "@/components/dashboard/demo-reset-button";
 import { activeStoreKind } from "@/lib/data/jobs";
 
 export default function WorkspaceLayout({
@@ -40,6 +41,7 @@ export default function WorkspaceLayout({
               />
               {storeKind === "supabase" ? "Supabase connected" : "Local demo data"}
             </span>
+            <DemoResetButton />
             <Link href="/jobs/new" className={buttonVariants({ size: "sm" })}>
               New enquiry
             </Link>
@@ -48,11 +50,21 @@ export default function WorkspaceLayout({
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       <footer className="border-t py-4">
-        <p className="mx-auto max-w-6xl px-4 text-[11px] leading-relaxed text-muted-foreground sm:px-6">
-          QuoteReady provides an AI-assisted scope-readiness assessment based on supplied
-          information. It does not diagnose faults, guarantee pricing, or replace professional
-          on-site assessment.
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 sm:px-6">
+          <p className="max-w-xl flex-1 text-[11px] leading-relaxed text-muted-foreground">
+            QuoteReady provides an AI-assisted scope-readiness assessment based on supplied
+            information. It does not diagnose faults, guarantee pricing, or replace professional
+            on-site assessment.
+          </p>
+          <div className="flex items-center gap-3 text-[11px]">
+            <Link href="/how-it-works" className="text-muted-foreground transition-colors hover:text-foreground">
+              How it works
+            </Link>
+            <Link href="/evaluation" className="text-muted-foreground transition-colors hover:text-foreground">
+              Evaluation
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

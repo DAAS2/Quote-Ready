@@ -16,6 +16,7 @@ import { DraftsList } from "@/components/scope/drafts-list";
 import { VersionHistory } from "@/components/scope/version-history";
 import { VoiceNotePanel } from "@/components/voice/voice-note-panel";
 import { BriefingPlayer } from "@/components/voice/briefing-player";
+import { JudgeStrip } from "@/components/shared/judge-strip";
 import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +68,8 @@ export default async function JobDetailPage({
           </div>
         </div>
       </div>
+
+      <JudgeStrip customerName={job.customer.full_name} />
 
       {job.safety_flag && <SafetyCard />}
 
