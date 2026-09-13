@@ -14,7 +14,17 @@ import { BrandLogoSvg } from "@/components/brand/logo";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
-/** The recorded product walkthrough, served from /public. */
+/**
+ * The recorded product walkthrough, served straight from /public.
+ *
+ * Delivery contract for anyone re-recording or re-exporting it: H.264 High,
+ * yuv420p, 1440x810 at 30fps, no audio track (the hero autoplays muted),
+ * `+faststart` for progressive playback, and CRF 25. That keeps this 68s clip
+ * near 6 MB instead of the 30 MB a default export produces.
+ *
+ * There is no build step and no server-side transcoding here — the file in
+ * /public is the artifact that ships, so its weight is the page's weight.
+ */
 const DEMO_VIDEO_SRC = "/demo/quote-ready-shorter-demo.mp4";
 
 /**
