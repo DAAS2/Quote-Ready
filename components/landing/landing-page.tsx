@@ -559,6 +559,18 @@ function HeroShowcase() {
 export function LandingPage() {
   const rootRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * "Product" scrolls back to the top. A plain `#top` anchor is unreliable here:
+   * the smooth-scroll CSS plus GSAP's ScrollTrigger both drive the scroll
+   * position, which can leave the hash jump stuck. Scrolling imperatively
+   * always lands.
+   */
+  function scrollToTop(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.history.replaceState(null, "", "#top");
+  }
+
   useGSAP(
     () => {
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -617,11 +629,9 @@ export function LandingPage() {
 
       ScrollTrigger.refresh();
 
-      return () => {
-        // kill any triggers this page created so a route change can never
-        // leave a dangling ScrollTrigger (which throws on the next tick)
-        ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-      };
+      // No manual cleanup: useGSAP reverts this context (and only the triggers
+      // it created) on unmount. Killing ScrollTrigger.getAll() here would tear
+      // down triggers owned by other components and throw on the next refresh.
     },
     { scope: rootRef },
   );
@@ -639,8 +649,9 @@ export function LandingPage() {
           <nav className="hidden lg:flex items-center gap-space-lg">
             <a
               aria-current="page"
-              className="transition-colors text-primary font-label-lg"
+              className="transition-colors text-primary font-label-lg cursor-pointer"
               href="#top"
+              onClick={scrollToTop}
             >
               Product
             </a>
@@ -1236,6 +1247,7 @@ export function LandingPage() {
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
                   href="#top"
+                  onClick={scrollToTop}
                 >
                   Product
                 </Link>

@@ -41,57 +41,64 @@ export function AnalysingView({
   urgencyLabel: string;
 }) {
   const router = useRouter();
-  const [scanProgress, setScanProgress] = useState(58);
-  const [photoProgress, setPhotoProgress] = useState(20);
-  const [stage, setStage] = useState<0 | 1 | 2 | 3>(1);
   const [elapsed, setElapsed] = useState(0);
-  const startedRef = useRef(false);
+  const [resolved, setResolved] = useState(false);
   const finishedRef = useRef(false);
+  /**
+   * The analysis request is cached per job and shared across effect runs.
+   * React StrictMode mounts effects twice in development; without this the
+   * first run would be cancelled (so the redirect never fired) while the
+   * second run bailed on the `startedRef` guard — leaving the screen frozen.
+   */
+  const requestRef = useRef<Promise<{ used_fallback?: boolean }> | null>(null);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // staged progress animation — deliberately asymptotic so a slow model call
-    // (photo analysis can take 20s+) never freezes the bars at 100%
-    const ticker = setInterval(() => {
-      setScanProgress((p) => (p < 92 ? p + Math.floor(Math.random() * 3) + 1 : p));
-      setPhotoProgress((p) => (p < 94 ? p + Math.floor(Math.random() * 4) + 1 : p));
-      setElapsed((e) => e + 1);
-    }, 1000);
-    timers.push(ticker as unknown as ReturnType<typeof setTimeout>);
+    const ticker = setInterval(() => setElapsed((e) => e + 1), 1000);
 
-    // run the real analysis
+    if (!requestRef.current) {
+      requestRef.current = fetch(`/api/jobs/${jobId}/analyse`, { method: "POST" }).then(
+        async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error ?? "Analysis failed.");
+          return data as { used_fallback?: boolean };
+        },
+      );
+    }
+    const request = requestRef.current;
+
     void (async () => {
       const startedAt = Date.now();
       try {
-        const res = await fetch(`/api/jobs/${jobId}/analyse`, { method: "POST" });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? "Analysis failed.");
+        const data = await request;
         if (cancelled) return;
-        const elapsed = Date.now() - startedAt;
-        const wait = Math.max(0, 3200 - elapsed);
+        // hold for a beat so the staged categories are readable, then move on
+        const wait = Math.max(0, 3200 - (Date.now() - startedAt));
         timers.push(
           setTimeout(() => {
             if (cancelled || finishedRef.current) return;
             finishedRef.current = true;
-            clearInterval(ticker);
-            setStage(3);
-            setScanProgress(100);
-            setPhotoProgress(100);
+            setResolved(true);
             if (data.used_fallback) {
               toast.message("Analysis completed with the offline rule engine.");
             }
-            setTimeout(() => router.replace(`/jobs/${jobId}`), 700);
-          }, wait) as unknown as ReturnType<typeof setTimeout>,
+            timers.push(
+              setTimeout(() => {
+                if (!cancelled) router.replace(`/jobs/${jobId}`);
+              }, 900),
+            );
+          }, wait),
         );
       } catch (error) {
         if (cancelled) return;
-        clearInterval(ticker);
         toast.error((error as Error).message);
-        setTimeout(() => router.replace(`/jobs/${jobId}`), 900);
+        timers.push(
+          setTimeout(() => {
+            if (!cancelled) router.replace(`/jobs/${jobId}`);
+          }, 900),
+        );
       }
     })();
 
@@ -108,7 +115,14 @@ export function AnalysingView({
   }
 
   const photos = photoPaths.slice(0, 2);
-  const photosDone = photoPaths.length === 0 || photoProgress >= 93;
+  // Staged progression: photos → scope details → recommendation. Each stage
+  // completes on a timer (or immediately once the analysis returns), so the
+  // screen always walks through the categories and then opens the job.
+  const photosDone = photoPaths.length === 0 || elapsed >= 6 || resolved;
+  const detailsDone = elapsed >= 12 || resolved;
+  const stage: 0 | 1 | 2 | 3 = resolved ? 3 : detailsDone ? 2 : 1;
+  const scanProgress = resolved ? 100 : Math.min(94, 12 + elapsed * 4);
+  const photoProgress = photosDone ? 100 : Math.min(90, 8 + elapsed * 6);
 
   return (
     <div className="flex flex-col w-full">
@@ -318,11 +332,11 @@ export function AnalysingView({
                       Reviewing attached photos
                     </span>
                     <span className="text-primary font-data-mono text-label-sm font-semibold">
-                      {photoPaths.length === 0
-                        ? "No photos"
-                        : photosDone
-                          ? "Verified"
-                          : `${photoProgress}%`}
+                    {photoPaths.length === 0
+                      ? "No photos"
+                      : photosDone
+                        ? "Verified"
+                        : `${Math.round(photoProgress)}%`}
                     </span>
                   </div>
                   <span className="font-label-sm text-label-sm text-primary font-medium">
@@ -403,18 +417,18 @@ export function AnalysingView({
             {/* Step 3: Required Scope Details */}
             <div
               className={`flex items-start gap-space-md p-space-sm rounded-lg transition-colors ${
-                stage >= 3 ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-75"
+                detailsDone ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-75"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  stage >= 3
+                  detailsDone
                     ? "bg-surface-container text-primary"
                     : "bg-surface-container-high text-outline"
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">
-                  {stage >= 3 ? "check_circle" : "radio_button_unchecked"}
+                  {detailsDone ? "check_circle" : "radio_button_unchecked"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -423,7 +437,7 @@ export function AnalysingView({
                     Checking required scope details
                   </span>
                   <span className="font-label-sm text-label-sm font-data-mono text-primary">
-                    {stage >= 3 ? "Processed" : "Queued"}
+                    {detailsDone ? "Processed" : "Queued"}
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
@@ -435,18 +449,18 @@ export function AnalysingView({
             {/* Step 4: Next-step Recommendation */}
             <div
               className={`flex items-start gap-space-md p-space-sm rounded-lg transition-colors ${
-                stage >= 3 ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-60"
+                resolved ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-60"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  stage >= 3
+                  resolved
                     ? "bg-surface-container text-primary"
                     : "bg-surface-container-high text-outline"
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">
-                  {stage >= 3 ? "check_circle" : "hourglass_empty"}
+                  {resolved ? "check_circle" : "hourglass_empty"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -455,7 +469,7 @@ export function AnalysingView({
                     Preparing next-step recommendation
                   </span>
                   <span className="font-label-sm text-label-sm font-data-mono text-primary">
-                    {stage >= 3 ? "Processed" : "Pending"}
+                    {resolved ? "Processed" : "Pending"}
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
