@@ -96,6 +96,133 @@ function builtInEditorState(base: JobType): EditorState {
   };
 }
 
+interface TemplateDetailSource {
+  required_fields?: Array<{
+    key: string;
+    label: string;
+    critical: boolean;
+    ask_customer: boolean;
+    why: string;
+  }>;
+  inspection_conditions?: Array<{
+    label: string;
+    any_risk_flag?: string[];
+    any_fact?: Array<{ key: string }>;
+  }>;
+  assumptions?: string[];
+  exclusions?: string[];
+  questions?: Record<string, string>;
+}
+
+/**
+ * Inline template detail — shows the actual required details, inspection
+ * triggers, assumptions and exclusions on the main templates page (no need to
+ * open a modal to see what a template really enforces).
+ */
+function TemplateDetailPanels({ doc }: { doc: TemplateDetailSource }) {
+  const fields = doc.required_fields ?? [];
+  const triggers = doc.inspection_conditions ?? [];
+  const assumptions = doc.assumptions ?? [];
+  const exclusions = doc.exclusions ?? [];
+  return (
+    <div className="flex flex-col gap-3 pt-3 border-t border-border">
+      <div className="flex flex-wrap gap-1.5">
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {fields.length} required details
+        </span>
+        <span className="px-2 py-0.5 rounded bg-[#FEF3C7] text-[#92400E] font-label-sm text-label-sm">
+          {triggers.length} inspection trigger{triggers.length === 1 ? "" : "s"}
+        </span>
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {assumptions.length} assumptions
+        </span>
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {exclusions.length} exclusions
+        </span>
+      </div>
+
+      {fields.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Required details
+          </span>
+          {fields.map((f) => (
+            <div key={`${f.key}-${f.label}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-primary text-[16px] mt-0.5 shrink-0">
+                {f.critical ? "error" : "check_circle"}
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="font-label-md text-label-md text-on-surface flex flex-wrap items-center gap-1.5">
+                  {f.label}
+                  {f.critical && (
+                    <span className="px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#B91C1C] font-label-sm text-[10px] uppercase">
+                      Critical
+                    </span>
+                  )}
+                  <span className="px-1.5 py-0.5 rounded bg-surface-container-low text-on-surface-variant font-label-sm text-[10px]">
+                    {f.ask_customer ? "Ask customer" : "On site"}
+                  </span>
+                </span>
+                {f.why && (
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">{f.why}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {triggers.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Inspection triggers
+          </span>
+          {triggers.map((c, i) => (
+            <div key={`${c.label}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[#D97706] text-[16px] mt-0.5 shrink-0">
+                warning_amber
+              </span>
+              <span className="font-body-sm text-body-sm text-[#92400E]">{c.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {assumptions.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Assumptions
+          </span>
+          {assumptions.map((a, i) => (
+            <div key={`${a}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">
+                check
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">{a}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {exclusions.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Exclusions
+          </span>
+          {exclusions.map((x, i) => (
+            <div key={`${x}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">
+                close
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">{x}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function fromRow(row: TemplateRow): EditorState {
   const doc = row.document;
   return {
@@ -812,7 +939,7 @@ export function TemplatesManager({
       )}
 
       {/* Template cards */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
+      <div data-tour="templates-list" className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
         {/* Built-ins (editable → saved as overrides) */}
         {BASE_TYPES.map((base) => {
           const overridden = templates.find((t) => t.base_type === base.value && t.is_default);
@@ -896,6 +1023,7 @@ export function TemplatesManager({
                 </div>
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant">{t.blurb}</p>
+              <TemplateDetailPanels doc={overridden ? overridden.document : t} />
             </div>
           );
         })}
@@ -980,6 +1108,7 @@ export function TemplatesManager({
               <p className="font-body-md text-body-md text-on-surface-variant">
                 {t.blurb || "Custom service template."}
               </p>
+              <TemplateDetailPanels doc={t.document} />
             </div>
           ))}
       </div>
@@ -989,7 +1118,7 @@ export function TemplatesManager({
         <div className="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
           <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
           <span>
-            <strong>Plumber verified:</strong> Templates encode trade judgement — QuoteReady never
+            <strong>Tradie verified:</strong> Templates encode trade judgement — QuoteReady never
             prices work or diagnoses faults on its own.
           </span>
         </div>

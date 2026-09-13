@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { BrandLogoSvg } from "@/components/brand/logo";
 import { markOnboarded, saveBusinessProfile, loadBusinessProfile } from "@/lib/auth/session";
+import { requestTour } from "@/lib/onboarding/tour";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Setup wizard — designed with the Calm Trade Precision system (stepper from
@@ -90,6 +91,9 @@ export function OnboardingWizard({ signedIn }: { signedIn: boolean }) {
       setStep(2);
       return;
     }
+    // Launch the interactive guided tour on the dashboard — the user creates
+    // their own first enquiry rather than being handed demo data.
+    requestTour();
     router.push("/dashboard");
     router.refresh();
   }
@@ -319,8 +323,8 @@ export function OnboardingWizard({ signedIn }: { signedIn: boolean }) {
                     How QuoteReady works
                   </h1>
                   <p className="font-body-md text-body-md text-on-surface-variant">
-                    Three steps, every time. Your workspace ships with 13 demo enquiries so you can
-                    explore risk-free.
+                    Three steps, every time. We&apos;ll walk you through it interactively in your
+                    workspace — creating a real, pre-filled enquiry together.
                   </p>
                 </div>
               </div>

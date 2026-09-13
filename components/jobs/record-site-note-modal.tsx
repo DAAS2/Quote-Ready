@@ -868,7 +868,7 @@ export function RecordSiteNoteModal({
                   strokeWidth="2"
                 />
               </svg>
-              Applying creates a new scope version and audit event for Alex Miller.
+              Applying creates a new scope version and records this against your operator account.
             </span>
             <span className="font-mono text-[10px]">Job {jobRef}</span>
           </div>

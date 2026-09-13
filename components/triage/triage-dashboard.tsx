@@ -18,17 +18,21 @@ type TabKey = "all" | "needs_info" | "inspection" | "ready";
  */
 export function TriageDashboard({
   greeting,
+  region,
   rows,
   counts,
   totalActive,
   voiceJobId,
+  emptyState = false,
   variant = "overview",
 }: {
   greeting: string;
+  region?: string | null;
   rows: TriageRow[];
   counts: { needsInfo: number; inspection: number; ready: number };
   totalActive: number;
   voiceJobId: string | null;
+  emptyState?: boolean;
   variant?: "overview" | "jobs";
 }) {
   const router = useRouter();
@@ -107,12 +111,12 @@ export function TriageDashboard({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
-            <span className="material-symbols-outlined text-secondary text-[18px]">near_me</span>
-            <span className="font-label-md text-label-md text-on-surface">
-              Melbourne North Region
-            </span>
-          </div>
+          {region && (
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
+              <span className="material-symbols-outlined text-secondary text-[18px]">near_me</span>
+              <span className="font-label-md text-label-md text-on-surface">{region}</span>
+            </div>
+          )}
           <button
             className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors"
             type="button"
@@ -123,6 +127,7 @@ export function TriageDashboard({
             <span>Import voice note</span>
           </button>
           <Link
+            data-tour="new-enquiry"
             className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary/90 transition-all"
             href="/jobs/new"
           >
@@ -217,18 +222,17 @@ export function TriageDashboard({
               All critical photos, dimensions &amp; scope items validated
             </p>
           </div>
-          <div className="mt-4 pt-3 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-container/20 text-primary font-label-sm text-label-sm">
+          <div className="mt-4 pt-3 flex items-center gap-2">              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-container/20 text-primary font-label-sm text-label-sm">
               <span className="material-symbols-outlined text-[14px]">check</span>
-              Ready for Alex&apos;s review &amp; approval
+              Ready for your review &amp; approval
             </span>
           </div>
         </div>
       </div>
       )}
 
-      {/* Today's Triage Insight Card */}
-      {variant === "overview" && (
+      {/* Today's Triage Insight Card (demo workspace only) */}
+      {variant === "overview" && !emptyState && (
       <div className="bg-surface-container-low rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-9 h-9 rounded-lg bg-secondary-container/50 flex items-center justify-center flex-shrink-0">
@@ -488,8 +492,37 @@ export function TriageDashboard({
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td className="py-10 px-5 text-center font-body-md text-body-md text-on-surface-variant" colSpan={7}>
-                    No enquiries match these filters.
+                  <td className="py-10 px-5 text-center" colSpan={7}>
+                    {totalActive === 0 && emptyState ? (
+                      <div className="flex flex-col items-center gap-3 py-4">
+                        <div className="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center">
+                          <span className="material-symbols-outlined text-primary text-[26px]">
+                            inbox
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-headline-sm text-headline-sm text-on-surface">
+                            No enquiries yet
+                          </span>
+                          <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
+                            Your workspace is empty. Create your first enquiry — QuoteReady analyses
+                            it and tells you what is still needed before a fixed estimate.
+                          </p>
+                        </div>
+                        <Link
+                          href="/jobs/new"
+                          data-tour="new-enquiry"
+                          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary/90 transition-all"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">add</span>
+                          <span>New enquiry</span>
+                        </Link>
+                      </div>
+                    ) : (
+                      <span className="font-body-md text-body-md text-on-surface-variant">
+                        No enquiries match these filters.
+                      </span>
+                    )}
                   </td>
                 </tr>
               )}
@@ -548,7 +581,7 @@ export function TriageDashboard({
         <div className="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
           <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
           <span>
-            <strong>Plumber verified:</strong> All job scopes and customer enquiries require tradie
+            <strong>Tradie verified:</strong> All job scopes and customer enquiries require tradie
             review and owner sign-off before quotes are generated.
           </span>
         </div>

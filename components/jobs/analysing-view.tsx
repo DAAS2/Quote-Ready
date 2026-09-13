@@ -122,7 +122,7 @@ export function AnalysingView({
             className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1"
             href="/jobs"
           >
-            <span className="material-symbols-outlined text-[16px]">plumbing</span>
+            <span className="material-symbols-outlined text-[16px]">handyman</span>
             <span>Jobs</span>
           </Link>
           <span className="text-outline-variant font-label-sm">/</span>
@@ -136,7 +136,7 @@ export function AnalysingView({
         </div>
         <div className="flex items-center gap-2 text-on-surface-variant font-data-mono text-label-sm">
           <span className="inline-block w-2 h-2 rounded-full bg-primary animate-ping"></span>
-          <span>Melbourne Queue · ID {queueRef}</span>
+          <span>Analysis queue · ID {queueRef}</span>
         </div>
       </div>
       {/* Stepper Component */}
@@ -290,9 +290,8 @@ export function AnalysingView({
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
-                  Extracted contact details, customer address in{" "}
-                  <span className="text-on-surface font-semibold">Melbourne, VIC</span>, and
-                  requested urgency timeline ({urgencyLabel}).
+                  Extracted contact details, the customer&apos;s service suburb, and the requested
+                  urgency timeline ({urgencyLabel}).
                 </p>
               </div>
             </div>
@@ -451,7 +450,7 @@ export function AnalysingView({
           <div className="mt-space-lg pt-space-md bg-surface-container-low/40 rounded-lg p-space-sm flex flex-col sm:flex-row items-center justify-between gap-space-sm">
             <div className="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
               <span className="material-symbols-outlined text-[18px] text-primary">lock_clock</span>
-              <span>Analysing locally based on Northside Plumbing standard rate cards</span>
+              <span>Analysing against your own standard rate cards — no prices are generated</span>
             </div>
             <button
               className="w-full sm:w-auto px-space-md py-2 rounded-lg bg-surface-container-lowest text-on-surface-variant hover:text-error hover:bg-error-container/40 font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 shadow-sm"
@@ -476,8 +475,8 @@ export function AnalysingView({
               </span>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant pb-space-md">
-              QuoteReady structures raw homeowner inquiries into standard Melbourne plumbing job
-              scopes before quotes are prepared.
+              QuoteReady structures raw customer enquiries into standard trade job scopes before
+              quotes are prepared.
             </p>
             {/* Bulleted Guidance List */}
             <div className="flex flex-col gap-space-md">
@@ -534,7 +533,7 @@ export function AnalysingView({
                     You review &amp; approve every action
                   </span>
                   <span className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
-                    Alex retains 100% control over hourly rates, parts margin markup, and all client
+                    You retain 100% control over hourly rates, parts margin markup, and all client
                     messages.
                   </span>
                 </div>
@@ -544,22 +543,24 @@ export function AnalysingView({
             <div className="mt-space-md pt-space-md bg-surface-container-low rounded-lg p-space-sm flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-on-surface-variant font-label-sm text-label-sm">
-                  Standard Labor Rate
+                  Pricing
                 </span>
                 <span className="font-data-mono font-bold text-on-surface text-label-lg">
-                  $110.00 / hr
+                  Your rate card
                 </span>
               </div>
               <div className="h-8 w-px bg-surface-container-high"></div>
               <div className="flex flex-col">
                 <span className="text-on-surface-variant font-label-sm text-label-sm">
-                  Parts Margin Applied
+                  Rates &amp; margins
                 </span>
-                <span className="font-data-mono font-bold text-primary text-label-lg">+22.5%</span>
+                <span className="font-data-mono font-bold text-primary text-label-lg">
+                  Stay under your review
+                </span>
               </div>
             </div>
           </div>
-          {/* Plumber Trust & Safety Shield Card */}
+          {/* Tradie trust & safety shield card */}
           <div className="bg-surface-container-high rounded-xl p-space-md shadow-sm relative overflow-hidden">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -567,16 +568,16 @@ export function AnalysingView({
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                  Plumber Oversight Guarantee
+                  Tradie Oversight Guarantee
                 </span>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-1 leading-snug">
                   QuoteReady never auto-sends quotes or texts customers without your explicit
-                  sign-off. Every material estimate remains completely under Alex&apos;s manual review.
+                  sign-off. Every material estimate remains completely under your manual review.
                 </p>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-[11px] pt-2">
-              <span>Northside Plumbing Rulebook v2.4</span>
+              <span>Your workspace rulebook</span>
               <span className="flex items-center gap-1 text-primary">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                 Strict Manual Dispatch

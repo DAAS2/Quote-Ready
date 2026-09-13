@@ -17,6 +17,14 @@ export default async function WorkspaceLayout({
   const jobsCount = jobs.filter((j) => j.status !== "closed").length;
   const messagesCount = jobs.filter((j) => j.status === "follow_up_drafted").length;
 
+  // Signed-in users see their own identity; anonymous visitors get the demo org.
+  const isDemo = !profile;
+  const businessName =
+    profile?.business_name?.trim() || (isDemo ? "Northside Plumbing" : "My workspace");
+  const operatorName =
+    profile?.full_name?.trim() ||
+    (isDemo ? "Alex Miller" : (profile?.email?.split("@")[0] ?? "You"));
+
   return (
     <WorkspaceShell
       jobsCount={jobsCount}
@@ -30,8 +38,11 @@ export default async function WorkspaceLayout({
         summary: a.summary,
         created_at: a.created_at,
       }))}
-      businessName={profile?.business_name || "Northside Plumbing"}
-      operatorName={profile?.full_name || "Alex Miller"}
+      businessName={businessName}
+      operatorName={operatorName}
+      email={profile?.email ?? null}
+      isDemo={isDemo}
+      serviceArea={profile?.service_area?.trim() || null}
     >
       {children}
     </WorkspaceShell>

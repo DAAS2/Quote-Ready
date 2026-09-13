@@ -222,6 +222,21 @@ export const AuditEventSchema = z.object({
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
+/* ── Voice-intake form filling (Gemini on a dictated enquiry) ────────────── */
+
+export const IntakeExtractionSchema = z.object({
+  customer_name: z.string().max(120).optional(),
+  phone: z.string().max(40).optional(),
+  email: z.string().max(160).optional(),
+  suburb: z.string().max(80).optional(),
+  job_type: JobTypeEnum.optional(),
+  message: z.string().max(2000).optional(),
+  availability: z.string().max(120).optional(),
+  urgency: UrgencyEnum.optional(),
+  property_type: z.string().max(80).optional(),
+});
+export type IntakeExtraction = z.infer<typeof IntakeExtractionSchema>;
+
 /* ── Voice-note update extraction (Gemini on transcript) ─────────────────── */
 
 const WaterDamageCoerce = z

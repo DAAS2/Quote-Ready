@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import type { TemplateRow } from "@/lib/data/types";
+import type { IntakeExtraction } from "@/lib/ai/schemas";
+import { AvailabilityPicker, formatAvailability } from "@/components/jobs/availability-picker";
+import { setTourJobId } from "@/lib/onboarding/tour";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * New enquiry — transcribed 1:1 from the new-enquiry design.
@@ -44,6 +47,8 @@ interface Photo {
 
 export function NewEnquiryForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isTour = searchParams.get("tour") === "1";
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -59,8 +64,34 @@ export function NewEnquiryForm() {
   const [submitting, setSubmitting] = useState<null | "draft" | "analyse">(null);
   const [ref, setRef] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const [customTemplates, setCustomTemplates] = useState<TemplateRow[]>([]);
+
+  // Guided-tour mode: pre-fill a realistic enquiry so the user can click through
+  // the whole flow without inventing data.
+  useEffect(() => {
+    if (!isTour) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDictating(true);
+    setCustomerName("Jordan Lee");
+    setPhone("0412 884 921");
+    setEmail("jordan.lee@example.com.au");
+    setSuburb("Brunswick, VIC 3056");
+    setJobType(JOB_TYPES[0]!.label);
+    setPropertyType(PROPERTY_TYPES[0]!);
+    setMessage(
+      "My bathroom basin tap has a slow drip that is getting worse and leaving a water mark on the vanity. It is not urgent but I would like it looked at next week.",
+    );
+    const next = new Date(Date.now() + 3 * 86400_000);
+    setAvailability(
+      `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`,
+    );
+  }, [isTour]);
 
   useEffect(() => {
     fetch("/api/templates")
@@ -78,14 +109,21 @@ export function NewEnquiryForm() {
     setRef(`ENQ-${new Date().getFullYear()}-${String(400 + (hash % 500)).padStart(4, "0")}`);
   }, []);
 
+  // Readiness is a weighted sum of *distinct* requirements — a name and phone
+  // number alone must never look like a half-finished scope.
   const readiness = useMemo(() => {
-    let score = 40;
-    if (customerName.trim().length >= 2 && phone.trim().length >= 6) score += 20;
+    let score = 0;
+    if (customerName.trim().length >= 2) score += 10;
+    if (phone.trim().length >= 6) score += 10;
+    if (email.trim().length >= 5) score += 5;
     if (suburb.trim().length >= 3) score += 15;
-    score += Math.min(photos.length, 2) * 10;
-    if (message.trim().length >= 30) score += 15;
+    if (message.trim().length >= 30) score += 25;
+    else if (message.trim().length > 0) score += 10;
+    score += Math.min(photos.length, 2) * 12;
+    if (availability) score += 8;
+    if (voiceTranscript.trim().length > 0) score += 5;
     return Math.min(95, score);
-  }, [customerName, phone, suburb, photos.length, message]);
+  }, [customerName, phone, email, suburb, photos.length, message, availability, voiceTranscript]);
 
   const templateIdUsed = jobType.startsWith(CUSTOM_PREFIX)
     ? jobType.slice(CUSTOM_PREFIX.length)
@@ -114,11 +152,93 @@ export function NewEnquiryForm() {
     });
   }
 
+  const JOB_TYPE_BY_VALUE: Record<string, string> = {
+    leaking_tap: "Leaking tap or mixer",
+    toilet_repair: "Blocked toilet or drain",
+    hot_water_system: "Hot water system fault",
+  };
+
+  function applyDictation(transcript: string, fields: IntakeExtraction, extracted: boolean) {
+    if (fields.customer_name) setCustomerName(fields.customer_name);
+    if (fields.phone) setPhone(fields.phone);
+    if (fields.email) setEmail(fields.email);
+    if (fields.suburb) setSuburb(fields.suburb);
+    if (fields.job_type && JOB_TYPE_BY_VALUE[fields.job_type]) {
+      setJobType(JOB_TYPE_BY_VALUE[fields.job_type]!);
+    }
+    if (fields.urgency === "urgent" || fields.urgency === "emergency") setUrgency("urgent");
+    else if (fields.urgency === "standard" || fields.urgency === "flexible") setUrgency("standard");
+    if (fields.property_type && PROPERTY_TYPES.includes(fields.property_type)) {
+      setPropertyType(fields.property_type);
+    }
+    if (fields.message) setMessage(fields.message);
+    else if (!message.trim()) setMessage(transcript);
+    setVoiceTranscript(transcript);
+    setVoiceOpen(false);
+    setDictating(true);
+    if (extracted) {
+      toast.success("Transcription applied — check each field before analysing.");
+    } else {
+      toast.message("Transcript captured. Fill in the remaining details before analysing.");
+    }
+  }
+
+  async function transcribeRecording(blob: Blob) {
+    setTranscribing(true);
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "intake.webm");
+      const res = await fetch("/api/intake/transcribe", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Transcription failed.");
+      applyDictation(data.transcript ?? "", data.fields ?? {}, Boolean(data.extracted));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function startRecording() {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Recording is not supported in this browser — type the details instead.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 0) void transcribeRecording(blob);
+        else toast.error("Nothing was recorded — try again.");
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      toast.error("Could not access the microphone — type the details instead.");
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  }
+
   function composeEnquiryText(): string {
     const parts: string[] = [];
     const msg = message.trim() || "Customer enquiry submitted without a written message.";
     parts.push(msg);
-    if (availability.trim()) parts.push(`Customer stated availability: ${availability.trim()}.`);
+    if (availability) {
+      const parsed = new Date(`${availability}T00:00:00`);
+      parts.push(`Customer stated availability: ${formatAvailability(parsed)}.`);
+    }
     parts.push(`Property type: ${propertyType}.`);
     const urgencyLabel =
       urgency === "standard" ? "Standard" : urgency === "soon" ? "Soon (within 48h)" : "Urgent (today)";
@@ -153,6 +273,7 @@ export function NewEnquiryForm() {
       const res = await fetch("/api/jobs", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not create the enquiry.");
+      if (isTour) setTourJobId(data.id);
       router.push(kind === "analyse" ? `/jobs/${data.id}/analysing` : `/jobs/${data.id}`);
     } catch (error) {
       toast.error((error as Error).message);
@@ -236,7 +357,7 @@ export function NewEnquiryForm() {
           <div className="bg-surface-container-lowest rounded-xl shadow-sm p-6 sm:p-8 flex flex-col gap-space-xl">
             {/* Section 1: Customer details */}
             <div className="flex flex-col gap-space-md">
-              <div className="flex items-center gap-space-sm pb-space-xs">
+              <div className="flex items-center gap-space-sm pb-space-xs" data-tour="enquiry-details">
                 <span className="material-symbols-outlined text-primary-container text-[20px]">
                   person
                 </span>
@@ -400,19 +521,7 @@ export function NewEnquiryForm() {
                   <label className="font-label-md text-label-md text-on-surface-variant" htmlFor="availability">
                     Customer stated availability
                   </label>
-                  <div className="relative flex items-center">
-                    <span className="material-symbols-outlined absolute left-3 text-outline text-[18px]">
-                      event
-                    </span>
-                    <input
-                      id="availability"
-                      className="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-container/20 transition-all"
-                      type="text"
-                      value={availability}
-                      onChange={(e) => setAvailability(e.target.value)}
-                      placeholder="Next week (flexible mornings)"
-                    />
-                  </div>
+                  <AvailabilityPicker id="availability" value={availability} onChange={setAvailability} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface-variant" htmlFor="property-type">
@@ -466,7 +575,7 @@ export function NewEnquiryForm() {
             <div className="w-full h-px bg-surface-container-high"></div>
             {/* Section 3: Evidence & photos */}
             <div className="flex flex-col gap-space-md">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3" data-tour="enquiry-evidence">
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-primary-container text-[20px]">
                     photo_library
@@ -475,15 +584,60 @@ export function NewEnquiryForm() {
                     3. Evidence &amp; site media
                   </h2>
                 </div>
-                <button
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors"
-                  onClick={() => setVoiceOpen(true)}
-                  type="button"
-                >
-                  <span className="material-symbols-outlined text-secondary text-[18px]">mic</span>
-                  Add voice note transcript
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    data-tour="enquiry-voice"
+                    className={
+                      recording
+                        ? "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error-container text-on-error-container font-label-md text-label-md shadow-sm"
+                        : "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-colors shadow-sm disabled:opacity-60"
+                    }
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={transcribing}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {recording ? "stop_circle" : "mic"}
+                    </span>
+                    {recording
+                      ? "Stop & fill form"
+                      : transcribing
+                        ? "Transcribing…"
+                        : "Record voice note"}
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors"
+                    onClick={() => setVoiceOpen(true)}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-secondary text-[18px]">
+                      keyboard
+                    </span>
+                    Type instead
+                  </button>
+                </div>
               </div>
+              {(recording || transcribing || dictating) && (
+                <div className="p-3 rounded-lg bg-surface-container-low flex items-center gap-3">
+                  <span
+                    className={`material-symbols-outlined text-primary text-[20px] ${recording ? "animate-pulse" : "animate-spin"}`}
+                  >
+                    {recording ? "graphic_eq" : transcribing ? "progress_activity" : "auto_awesome"}
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="font-label-md text-label-md text-on-surface">
+                      {recording
+                        ? "Recording — speak the customer's details, then stop."
+                        : transcribing
+                          ? "Transcribing with ElevenLabs Scribe…"
+                          : "Voice intake applied — review the fields below."}
+                    </span>
+                    <span className="font-body-sm text-body-sm text-on-surface-variant">
+                      Voice → transcript → Gemini places each detail into the right field.
+                    </span>
+                  </div>
+                </div>
+              )}
               {templateIdUsed && (
                 <div className="p-2.5 rounded-lg bg-surface-container flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-[18px]">fact_check</span>
@@ -595,6 +749,7 @@ export function NewEnquiryForm() {
               </button>
               <div className="flex flex-col items-center sm:items-end w-full sm:w-auto gap-1">
                 <button
+                  data-tour="enquiry-submit"
                   className="w-full sm:w-auto px-6 py-3 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   disabled={submitting !== null}
                   onClick={() => submit("analyse")}
@@ -654,8 +809,8 @@ export function NewEnquiryForm() {
                     2. Supporting evidence
                   </span>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    Assesses whether uploaded images verify tap model, cartridge access, and
-                    functional isolation valves.
+                    Assesses whether uploaded images verify the fixture, the access point and the
+                    isolation valves.
                   </p>
                 </div>
               </div>
@@ -668,8 +823,8 @@ export function NewEnquiryForm() {
                     3. Access and availability
                   </span>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    Flags under-sink clearance, potential physical obstacles, and technician
-                    schedule alignment in Melbourne.
+                    Flags clearance, potential physical obstacles, and technician schedule
+                    alignment.
                   </p>
                 </div>
               </div>
@@ -682,8 +837,8 @@ export function NewEnquiryForm() {
                     4. Inspection &amp; safety signals
                   </span>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                    Scans for concealed pipe risks, water damage warning signs, or Victorian
-                    plumbing compliance checks.
+                    Scans for concealed service risks, water damage warning signs, and relevant
+                    compliance checks.
                   </p>
                 </div>
               </div>
@@ -696,7 +851,7 @@ export function NewEnquiryForm() {
               </span>
               <p className="font-label-sm text-label-sm text-on-surface-variant leading-relaxed">
                 <strong className="text-on-surface font-semibold">Tradie Verification:</strong>{" "}
-                QuoteReady helps prepare a scope. A licensed plumber must review and approve all
+                QuoteReady helps prepare a scope. A licensed tradie must review and approve all
                 recommendations before pricing or commencing work.
               </p>
             </div>
@@ -716,10 +871,15 @@ export function NewEnquiryForm() {
               ></div>
             </div>
             <p className="font-label-sm text-label-sm text-on-surface-variant mt-1">
-              {readiness >= 60 ? "✓" : "○"} {photos.length} photo{photos.length === 1 ? "" : "s"} attached
+              {photos.length > 0 ? "✓" : "○"} {photos.length} photo
+              {photos.length === 1 ? "" : "s"} attached
               <br />
-              {customerName && phone ? "✓" : "○"} Customer contact &amp; suburb{" "}
-              {suburb ? "validated" : "pending"}
+              {customerName.trim().length >= 2 && phone.trim().length >= 6 ? "✓" : "○"} Customer
+              contact {phone.trim().length >= 6 ? "captured" : "pending"}
+              <br />
+              {message.trim().length >= 30 ? "✓" : "○"} Job details described
+              <br />
+              {availability ? "✓" : "○"} Availability selected
             </p>
           </div>
           <Link

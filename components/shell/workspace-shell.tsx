@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogoSvg } from "@/components/brand/logo";
+import { TourOverlay } from "@/components/onboarding/tour-overlay";
+import { useSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/utils/format";
 
@@ -21,14 +23,26 @@ interface ShellNavItem {
   href: string;
   label: string;
   icon: string;
+  tour?: string;
   match: (pathname: string) => boolean;
 }
 
 const NAV_ITEMS: ShellNavItem[] = [
   { href: "/dashboard", label: "Overview", icon: "grid_view", match: (p) => p === "/dashboard" },
-  { href: "/jobs", label: "Jobs", icon: "plumbing", match: (p) => p.startsWith("/jobs") },
+  {
+    href: "/jobs",
+    label: "Jobs",
+    icon: "handyman",
+    match: (p) => p.startsWith("/jobs"),
+  },
   { href: "/messages", label: "Messages", icon: "chat_bubble", match: (p) => p.startsWith("/messages") },
-  { href: "/templates", label: "Templates", icon: "description", match: (p) => p.startsWith("/templates") },
+  {
+    href: "/templates",
+    label: "Templates",
+    icon: "description",
+    tour: "nav-templates",
+    match: (p) => p.startsWith("/templates"),
+  },
 ];
 
 const ALERT_ICONS: Record<string, { icon: string; tone: string }> = {
@@ -42,9 +56,25 @@ const ALERT_ICONS: Record<string, { icon: string; tone: string }> = {
   evidence_added: { icon: "photo_library", tone: "text-secondary" },
 };
 
+const PAGE_TITLES: Array<[string, string]> = [
+  ["/jobs/new", "New enquiry"],
+  ["/jobs", "Jobs"],
+  ["/dashboard", "Overview"],
+  ["/messages", "Messages"],
+  ["/templates", "Templates"],
+  ["/settings", "Settings"],
+];
+
+function pageTitle(pathname: string): string {
+  for (const [prefix, label] of PAGE_TITLES) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return label;
+  }
+  return "Workspace";
+}
+
 /**
- * Workspace shell — transcribed 1:1 from the triage dashboard design
- * (fixed navy sidebar + operations rail header with live alerts popup).
+ * Workspace shell — navy sidebar (collapsible on desktop, slide-over on
+ * mobile) + operations rail header with live alerts.
  */
 export function WorkspaceShell({
   children,
@@ -53,6 +83,9 @@ export function WorkspaceShell({
   alerts,
   businessName,
   operatorName,
+  email,
+  isDemo,
+  serviceArea,
 }: {
   children: React.ReactNode;
   jobsCount: number;
@@ -60,23 +93,35 @@ export function WorkspaceShell({
   alerts: AlertItem[];
   businessName: string;
   operatorName: string;
+  email: string | null;
+  isDemo: boolean;
+  serviceArea: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { signOut } = useSession();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [resetOpen, setResetOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [resetting, setResetting] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [seenAt, setSeenAt] = useState<string>("");
 
   useEffect(() => {
-    // read the persisted "seen" marker once on mount (client-only)
+    // read persisted UI prefs once on mount (client-only)
     const timer = setTimeout(() => {
       setSeenAt(window.localStorage.getItem("qr-alerts-seen-at") ?? "");
+      setCollapsed(window.localStorage.getItem("qr-sidebar-collapsed") === "1");
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // close the mobile drawer whenever the route changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -105,159 +150,296 @@ export function WorkspaceShell({
     router.push(`/jobs/${alert.job_id}`);
   }
 
-  async function resetDemo() {
-    setResetOpen(false);
-    setResetting(true);
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      window.localStorage.setItem("qr-sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
     try {
-      await fetch("/api/demo/reset", { method: "POST" });
+      await signOut();
+      router.push("/");
       router.refresh();
     } finally {
-      setResetting(false);
+      setSigningOut(false);
     }
   }
 
-  return (
+  const nav = (
     <>
-      {/* Workspace Sidebar (Dark Navy) */}
-      <aside className="fixed left-0 top-0 hidden h-full w-64 bg-inverse-surface z-50 flex-col justify-between p-space-sm shadow-[0_1px_8px_rgba(0,0,0,0.04)] lg:flex">
-        <div className="flex flex-col">
-          <div className="h-16 px-space-md flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-space-sm">
-              <BrandLogoSvg tone="dark" wordmark={false} className="h-8 w-auto object-contain" />
-              <span className="font-headline-sm text-headline-sm text-inverse-on-surface tracking-tight">
+      <div className="flex flex-col">
+        <div
+          className={cn(
+            "h-16 px-space-sm flex items-center gap-space-sm",
+            collapsed && "lg:justify-center lg:px-0",
+          )}
+        >
+          <Link href="/dashboard" className="flex items-center gap-space-sm min-w-0">
+            <BrandLogoSvg tone="dark" wordmark={false} className="h-8 w-auto object-contain" />
+            {!collapsed && (
+              <span className="font-headline-sm text-headline-sm text-inverse-on-surface tracking-tight truncate">
                 QuoteReady
               </span>
-            </Link>
-            <span className="px-space-xs py-0.5 rounded bg-tertiary text-on-tertiary font-label-sm text-label-sm uppercase tracking-wider">
+            )}
+          </Link>
+          {!collapsed && (
+            <span className="ml-auto px-space-xs py-0.5 rounded bg-tertiary text-on-tertiary font-label-sm text-label-sm uppercase tracking-wider">
               Ops
             </span>
-          </div>
+          )}
+        </div>
+        {!collapsed && (
           <div className="px-space-md pt-space-md pb-space-xs">
             <p className="font-label-sm text-label-sm text-tertiary-fixed-dim uppercase tracking-wider">
               Workspace
             </p>
           </div>
-          <nav className="flex flex-col gap-1 px-space-sm" aria-label="Primary">
-            {NAV_ITEMS.map((item) => {
-              const active = item.match(pathname);
-              return (
-                <Link
-                  key={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "group flex items-center justify-between px-space-md py-2.5 rounded-lg transition-all",
-                    active
-                      ? "bg-primary-container text-on-primary-container font-label-lg"
-                      : "text-tertiary-fixed-dim hover:bg-tertiary hover:text-on-tertiary font-label-lg",
-                  )}
-                  href={item.href}
-                >
-                  <div className="flex items-center gap-space-sm">
-                    <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-                    <span className="font-label-lg text-label-lg">{item.label}</span>
-                  </div>
-                  {item.href === "/jobs" && jobsCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
-                      {jobsCount}
-                    </span>
-                  )}
-                  {item.href === "/messages" && messagesCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
-                      {messagesCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-        <div className="flex flex-col p-space-sm gap-space-sm">
-          <div className="p-space-sm rounded-lg bg-tertiary/40 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="font-label-md text-label-md text-inverse-on-surface truncate max-w-[150px]">
-                  {businessName}
-                </span>
-                <span className="font-body-sm text-body-sm text-tertiary-fixed-dim">
-                  Melbourne, VIC
-                </span>
-              </div>
-              <div className="relative">
-                {resetOpen && (
-                  <div className="absolute bottom-8 right-0 w-48 rounded-lg bg-surface-container-lowest shadow-lg border border-border py-1 z-10">
-                    <button
-                      type="button"
-                      onClick={resetDemo}
-                      disabled={resetting}
-                      className="w-full text-left px-3 py-2 font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors"
-                    >
-                      {resetting ? "Resetting…" : "Reset demo data"}
-                    </button>
-                    <Link
-                      href="/settings"
-                      className="block px-3 py-2 font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors"
-                    >
-                      Workspace settings
-                    </Link>
-                  </div>
+        )}
+        <nav className="flex flex-col gap-1 px-space-sm" aria-label="Primary">
+          {NAV_ITEMS.map((item) => {
+            const active = item.match(pathname);
+            return (
+              <Link
+                key={item.href}
+                aria-current={active ? "page" : undefined}
+                title={collapsed ? item.label : undefined}
+                data-tour={item.tour}
+                className={cn(
+                  "group flex items-center px-space-md py-2.5 rounded-lg transition-all",
+                  collapsed && "lg:justify-center lg:px-0",
+                  collapsed ? "justify-between" : "justify-between",
+                  active
+                    ? "bg-primary-container text-on-primary-container font-label-lg"
+                    : "text-tertiary-fixed-dim hover:bg-tertiary hover:text-on-tertiary font-label-lg",
                 )}
-                <button
-                  type="button"
-                  aria-label="Workspace options"
-                  onClick={() => setResetOpen((v) => !v)}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-tertiary-fixed-dim hover:bg-tertiary hover:text-on-tertiary transition-colors"
-                >
-                  <span className="material-symbols-outlined text-tertiary-fixed-dim text-[18px]">
-                    unfold_more
+                href={item.href}
+              >
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+                  {!collapsed && <span className="font-label-lg text-label-lg">{item.label}</span>}
+                </div>
+                {!collapsed && item.href === "/jobs" && jobsCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
+                    {jobsCount}
                   </span>
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 pt-1">
-              <span className="material-symbols-outlined text-primary-fixed-dim text-[14px]">
-                verified
+                )}
+                {!collapsed && item.href === "/messages" && messagesCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
+                    {messagesCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className="flex flex-col p-space-sm gap-space-sm">
+        {!collapsed && (
+          <div className="p-space-sm rounded-lg bg-tertiary/40 flex flex-col gap-1">
+            <span className="font-label-md text-label-md text-inverse-on-surface truncate">
+              {businessName}
+            </span>
+            <span className="font-body-sm text-body-sm text-tertiary-fixed-dim truncate">
+              {serviceArea || (isDemo ? "Demo workspace" : "Set your service area")}
+            </span>
+          </div>
+        )}
+        <Link
+          href="/settings"
+          title={collapsed ? operatorName : undefined}
+          className={cn(
+            "p-space-sm rounded-lg flex items-center gap-space-sm bg-tertiary/20 hover:bg-tertiary/40 transition-colors",
+            collapsed && "lg:justify-center",
+          )}
+        >
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
+          </div>
+          {!collapsed && (
+            <div className="flex flex-col min-w-0">
+              <span className="font-label-md text-label-md text-inverse-on-surface truncate">
+                {operatorName}
               </span>
               <span className="font-label-sm text-label-sm text-tertiary-fixed-dim truncate">
-                Lic. #48291 Residential
+                {email ?? "Workspace owner"}
               </span>
             </div>
-          </div>
+          )}
+        </Link>
+        {isDemo ? (
           <Link
-            href="/settings"
-            className="p-space-sm rounded-lg flex items-center justify-between bg-tertiary/20 hover:bg-tertiary/40 transition-colors"
+            href="/signup"
+            className={cn(
+              "p-2.5 rounded-lg flex items-center gap-space-sm bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-colors",
+              collapsed && "lg:justify-center",
+            )}
           >
-            <div className="flex items-center gap-space-sm">
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                  <span className="material-symbols-outlined text-on-primary text-[18px]">
-                    person
-                  </span>
-                </div>
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-primary-fixed ring-2 ring-inverse-surface"></span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-label-md text-label-md text-inverse-on-surface">
-                  {operatorName}
-                </span>
-                <span className="font-label-sm text-label-sm text-tertiary-fixed-dim">
-                  Owner / Plumber
-                </span>
-              </div>
-            </div>
-            <span className="material-symbols-outlined text-tertiary-fixed-dim text-[18px]">
-              settings
-            </span>
+            <span className="material-symbols-outlined text-[18px]">person_add</span>
+            {!collapsed && <span>Create account</span>}
           </Link>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            title={collapsed ? "Sign out" : undefined}
+            className={cn(
+              "p-2.5 rounded-lg flex items-center gap-space-sm bg-tertiary/20 hover:bg-error/20 hover:text-error-container text-tertiary-fixed-dim font-label-md text-label-md transition-colors disabled:opacity-60",
+              collapsed && "lg:justify-center",
+            )}
+          >
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+            {!collapsed && <span>{signingOut ? "Signing out…" : "Sign out"}</span>}
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <TourOverlay />
+
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 hidden h-full bg-inverse-surface z-50 flex-col justify-between p-space-sm shadow-[0_1px_8px_rgba(0,0,0,0.04)] lg:flex transition-[width] duration-200",
+          collapsed ? "w-[76px]" : "w-64",
+        )}
+      >
+        {nav}
       </aside>
 
-      <div className="flex min-h-dvh flex-col lg:pl-64">
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-[60]">
+          <div
+            className="absolute inset-0 bg-[#0b1524]/60 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
+          <aside className="absolute left-0 top-0 h-full w-64 bg-inverse-surface flex flex-col justify-between p-space-sm shadow-2xl overflow-y-auto custom-scroll">
+            <div className="flex flex-col">
+              <div className="h-16 px-space-sm flex items-center justify-between">
+                <Link href="/dashboard" className="flex items-center gap-space-sm">
+                  <BrandLogoSvg tone="dark" wordmark={false} className="h-8 w-auto object-contain" />
+                  <span className="font-headline-sm text-headline-sm text-inverse-on-surface tracking-tight">
+                    QuoteReady
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  onClick={() => setMobileOpen(false)}
+                  className="p-1 rounded-lg text-tertiary-fixed-dim hover:bg-tertiary hover:text-on-tertiary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+              <div className="px-space-md pt-space-md pb-space-xs">
+                <p className="font-label-sm text-label-sm text-tertiary-fixed-dim uppercase tracking-wider">
+                  Workspace
+                </p>
+              </div>
+              <nav className="flex flex-col gap-1 px-space-sm" aria-label="Primary mobile">
+                {NAV_ITEMS.map((item) => {
+                  const active = item.match(pathname);
+                  return (
+                    <Link
+                      key={item.href}
+                      aria-current={active ? "page" : undefined}
+                      data-tour={item.tour}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        "flex items-center justify-between px-space-md py-2.5 rounded-lg transition-all",
+                        active
+                          ? "bg-primary-container text-on-primary-container font-label-lg"
+                          : "text-tertiary-fixed-dim hover:bg-tertiary hover:text-on-tertiary font-label-lg",
+                      )}
+                      href={item.href}
+                    >
+                      <div className="flex items-center gap-space-sm">
+                        <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+                        <span className="font-label-lg text-label-lg">{item.label}</span>
+                      </div>
+                      {item.href === "/jobs" && jobsCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
+                          {jobsCount}
+                        </span>
+                      )}
+                      {item.href === "/messages" && messagesCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-data-mono text-label-sm">
+                          {messagesCount}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className="flex flex-col p-space-sm gap-space-sm">
+              <div className="p-space-sm rounded-lg bg-tertiary/40 flex flex-col gap-1">
+                <span className="font-label-md text-label-md text-inverse-on-surface truncate">
+                  {businessName}
+                </span>
+                <span className="font-body-sm text-body-sm text-tertiary-fixed-dim truncate">
+                  {serviceArea || (isDemo ? "Demo workspace" : "Set your service area")}
+                </span>
+              </div>
+              {isDemo ? (
+                <Link
+                  href="/signup"
+                  className="p-2.5 rounded-lg flex items-center gap-space-sm bg-primary-container text-on-primary font-label-md text-label-md"
+                >
+                  <span className="material-symbols-outlined text-[18px]">person_add</span>
+                  <span>Create account</span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="p-2.5 rounded-lg flex items-center gap-space-sm bg-tertiary/20 text-tertiary-fixed-dim font-label-md text-label-md disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  <span>{signingOut ? "Signing out…" : "Sign out"}</span>
+                </button>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <div className={cn("flex min-h-dvh flex-col", collapsed ? "lg:pl-[76px]" : "lg:pl-64")}>
         {/* Top Navigation Rail */}
-        <header className="fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-4 sm:px-space-lg lg:left-64">
+        <header className="fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between gap-3 px-3 sm:px-space-lg lg:left-64">
           <div className="flex items-center gap-space-md min-w-0">
+            <button
+              type="button"
+              aria-label="Open menu"
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 -ml-1 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            >
+              <span className="material-symbols-outlined text-[22px]">menu</span>
+            </button>
+            <button
+              type="button"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={toggleCollapsed}
+              className="hidden lg:flex p-2 -ml-1 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            >
+              <span className="material-symbols-outlined text-[22px]">
+                {collapsed ? "right_panel_open" : "left_panel_close"}
+              </span>
+            </button>
             <Link
               href="/dashboard"
-              className="lg:hidden flex items-center gap-1.5"
+              className="lg:hidden flex items-center"
               aria-label="QuoteReady dashboard"
             >
               <BrandLogoSvg tone="light" wordmark={false} className="h-6 w-auto object-contain" />
@@ -265,9 +447,9 @@ export function WorkspaceShell({
             <div className="hidden items-center gap-space-xs font-label-md text-label-md text-on-surface-variant lg:flex">
               <span className="material-symbols-outlined text-[18px]">home</span>
               <span>/</span>
-              <span className="text-on-surface font-label-md">Operations Rail</span>
+              <span className="text-on-surface font-label-md">{pageTitle(pathname)}</span>
             </div>
-            <div className="relative flex items-center max-w-xs sm:max-w-none">
+            <div className="relative flex items-center flex-1 lg:flex-none min-w-0">
               <span className="material-symbols-outlined absolute left-3 text-outline text-[18px]">
                 search
               </span>
@@ -280,12 +462,12 @@ export function WorkspaceShell({
                     router.push(`/jobs?q=${encodeURIComponent(query.trim())}`);
                   }
                 }}
-                className="w-52 sm:w-80 h-10 pl-9 pr-14 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest transition-all"
+                className="w-full lg:w-80 h-10 pl-9 pr-14 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest transition-all"
                 placeholder="Search jobs, address or customer..."
                 type="text"
                 aria-label="Search jobs, address or customer"
               />
-              <kbd className="absolute right-2 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-data-mono text-label-sm">
+              <kbd className="hidden sm:block absolute right-2 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-data-mono text-label-sm">
                 ⌘K
               </kbd>
             </div>
@@ -304,9 +486,6 @@ export function WorkspaceShell({
                 type="button"
               >
                 <span className="material-symbols-outlined text-[22px]">notifications</span>
-                {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary-container"></span>
-                )}
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error font-data-mono text-[9px] font-bold flex items-center justify-center">
                     {unreadCount > 9 ? "9+" : unreadCount}

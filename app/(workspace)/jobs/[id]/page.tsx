@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { store } from "@/lib/data/jobs";
+import { getServerProfile } from "@/lib/data/org";
 import { JobDetailView } from "@/components/jobs/job-detail-view";
 import { QuotePanel } from "@/components/quotes/quote-panel";
 import type { DraftRow, JobDetail } from "@/lib/data/types";
@@ -94,7 +95,7 @@ const FACT_ORDER = [
   "system_age",
 ];
 
-function buildKnownFacts(job: JobDetail, scope: ScopePack | null) {
+function buildKnownFacts(job: JobDetail, scope: ScopePack | null, region: string | null) {
   const rows: Array<{ label: string; value: string; wide?: boolean }> = [];
   const known = scope?.known_facts ?? {};
   for (const key of FACT_ORDER) {
@@ -119,7 +120,7 @@ function buildKnownFacts(job: JobDetail, scope: ScopePack | null) {
   if (name !== "—") {
     rows.push({
       label: "Service Suburb",
-      value: `${name}${postcode ? `, ${postcode}` : ""} (Melbourne North Region)`,
+      value: `${name}${postcode ? `, ${postcode}` : ""}${region ? ` (${region})` : ""}`,
       wide: true,
     });
   }
@@ -240,8 +241,16 @@ export default async function JobDetailPage({
 }) {
   const { id } = await params;
   const { applied } = await searchParams;
-  const job = await store.getJob(id);
+  const [job, profile] = await Promise.all([
+    store.getJob(id),
+    getServerProfile().catch(() => null),
+  ]);
   if (!job) notFound();
+
+  const isDemo = !profile;
+  const operatorName =
+    profile?.full_name?.trim() || (isDemo ? "Alex Miller" : "You");
+  const region = profile?.service_area?.trim() || (isDemo ? "Melbourne Metro" : null);
 
   const scope = job.scope;
   const versions = job.versions;
@@ -281,8 +290,9 @@ export default async function JobDetailPage({
       phone={job.customer.phone ?? "—"}
       suburbLine={`${suburbName}${postcode ? `, ${postcode}` : ""}`}
       createdLine={createdLine(job.created_at)}
-      updatedLine={`Updated at ${clock(job.updated_at)} by Alex Miller`}
+      updatedLine={`Updated at ${clock(job.updated_at)} by ${operatorName}`}
       jobTypeLabel={jobTypeLabel}
+      operatorName={operatorName}
       statusPill={badge.pill}
       statusLabel={badge.label}
       statusIcon={badge.icon}
@@ -304,7 +314,7 @@ export default async function JobDetailPage({
             ? photoEvidence[i]!.claim
             : "Customer-supplied site photo",
       }))}
-      knownFacts={buildKnownFacts(job, scope)}
+      knownFacts={buildKnownFacts(job, scope, region)}
       missingFields={(scope?.missing_fields ?? []).map((m) => ({
         key: m.key,
         title: m.label,
