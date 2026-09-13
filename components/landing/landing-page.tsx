@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -9,97 +9,55 @@ import { BrandLogoSvg } from "@/components/brand/logo";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Landing page — transcribed from the B2B SaaS landing design, upgraded with
- * GSAP scroll-reveal motion and a fully interactive, clickable hero demo:
- * intake → analysis loading → typed follow-up draft → approved + notification.
+ * GSAP scroll-reveal motion and a recorded product walkthrough in the hero.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
-const DRAFT_MESSAGE =
-  "Hi Jordan, thanks for sending through photos of your bathroom tap. To help us confirm the exact repair approach and parts, could you please send a quick photo of the underside plumbing showing whether the mini-stop valves turn smoothly? Based on current details, an on-site diagnostic inspection ($89 refundable against work) is strongly recommended before fixing a price, so we don't encounter unforeseen variations.";
+/** The recorded product walkthrough, served from /public. */
+const DEMO_VIDEO_SRC = "/demo/quote-ready-demo.mp4";
 
-type DemoStage = "intake" | "analysing" | "scoped" | "sent";
+/**
+ * Hero demo — the recorded walkthrough of the real product, framed in browser
+ * chrome so it reads as the app rather than a marketing clip.
+ *
+ * It autoplays muted, inline and looping. Autoplay is treated as a courtesy,
+ * never a guarantee: if the browser refuses (low-power mode, data saver, or a
+ * reduced-motion preference) the player just waits behind a play affordance
+ * instead of erroring.
+ */
+function HeroDemoVideo() {
+  const video = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-function HeroShowcase() {
-  const [stage, setStage] = useState<DemoStage>("intake");
-  const [progress, setProgress] = useState(0);
-  const [typed, setTyped] = useState("");
-  const [notifications, setNotifications] = useState(0);
-  const root = useRef<HTMLDivElement>(null);
-
-  // staged typing for the follow-up draft
   useEffect(() => {
-    if (stage !== "scoped") return;
-    let i = 0;
-    const timer = setInterval(() => {
-      i += 3;
-      setTyped(DRAFT_MESSAGE.slice(0, i));
-      if (i >= DRAFT_MESSAGE.length) clearInterval(timer);
-    }, 12);
-    return () => clearInterval(timer);
-  }, [stage]);
-
-  // pop the notification chip when the follow-up is approved
-  useEffect(() => {
-    if (stage !== "sent" || !root.current) return;
-    const chip = root.current.querySelector(".hero-notification");
-    if (chip) {
-      gsap.fromTo(
-        chip,
-        { scale: 0.6, autoAlpha: 0, y: 8 },
-        { scale: 1, autoAlpha: 1, y: 0, duration: 0.45, ease: "back.out(2)" },
-      );
-    }
-  }, [stage]);
-
-  const runAnalysis = useCallback(() => {
-    setStage("analysing");
-    setProgress(0);
-    let p = 0;
-    const timer = setInterval(() => {
-      p += Math.floor(Math.random() * 9) + 5;
-      if (p >= 62) {
-        p = 62;
-        clearInterval(timer);
-        setTimeout(() => setStage("scoped"), 350);
-      }
-      setProgress(p);
-    }, 130);
+    const el = video.current;
+    if (!el) return;
+    // Set the property, not just the attribute: some browsers only honour a
+    // muted video for autoplay when the DOM property is set before play().
+    el.muted = true;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    void el.play().catch(() => {});
   }, []);
 
-  const approve = useCallback(() => {
-    setStage("sent");
-    setNotifications((n) => n + 1);
-  }, []);
-
-  const replay = useCallback(() => {
-    setStage("intake");
-    setProgress(0);
-    setTyped("");
-  }, []);
-
-  // Endless auto-play: intake → analysing → scoped draft → approved → replay.
+  // Never let the placeholder outstay its welcome: if the media events are
+  // throttled (data saver, reduced motion) the first frame still shows.
   useEffect(() => {
-    if (stage === "intake") {
-      const t = setTimeout(runAnalysis, 1800);
-      return () => clearTimeout(t);
-    }
-    if (stage === "scoped") {
-      const t = setTimeout(approve, 4200);
-      return () => clearTimeout(t);
-    }
-    if (stage === "sent") {
-      const t = setTimeout(replay, 4600);
-      return () => clearTimeout(t);
-    }
-    return undefined;
-  }, [stage, runAnalysis, approve, replay]);
+    const t = setTimeout(() => setReady(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
 
-  const analysed = stage === "scoped" || stage === "sent";
-  const dashOffset = 88 * (1 - progress / 100);
+  function togglePlayback() {
+    const el = video.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => {});
+    else el.pause();
+  }
 
   return (
-    <div ref={root} className="w-full max-w-5xl mt-12 text-left">
+    <div className="w-full max-w-5xl mt-12 text-left">
       <div className="rounded-xl overflow-hidden bg-surface-container-lowest shadow-[0_12px_36px_rgba(16,42,67,0.09)] transition-all">
         {/* Realistic browser chrome */}
         <div className="bg-surface-container-high">
@@ -141,415 +99,80 @@ function HeroShowcase() {
                 <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
                 <span>Audit Sync Active</span>
               </span>
-              {/* Live notification bell (clickable) */}
-              <span className="relative flex items-center">
-                <button
-                  type="button"
-                  aria-label={`Notifications (${notifications})`}
-                  className="relative p-1 rounded-lg hover:bg-surface-container-lowest/60 transition-colors"
-                  onClick={() => setNotifications(0)}
-                >
-                  <span className="material-symbols-outlined text-[18px]">notifications</span>
-                  {notifications > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-error text-on-error font-data-mono text-[8px] font-bold flex items-center justify-center">
-                      {notifications}
-                    </span>
-                  )}
-                </button>
-              </span>
             </div>
           </div>
         </div>
-        {/* Job Header Bar inside Mockup */}
-        <div className="p-4 sm:p-6 bg-surface-container-lowest flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-data-mono text-label-sm text-primary font-semibold">
-                QR-2024-089
-              </span>
-              <span className="text-outline-variant text-label-sm">•</span>
+        {/* The recorded walkthrough, playing inside the chrome */}
+        <div className="group/video relative aspect-video bg-[#0B1B2B] overflow-hidden">
+          {!failed && (
+            <video
+              ref={video}
+              src={DEMO_VIDEO_SRC}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              disablePictureInPicture
+              aria-label="QuoteReady product walkthrough"
+              className={`h-full w-full object-cover transition-opacity duration-700 ${
+                ready ? "opacity-100" : "opacity-0"
+              }`}
+              onLoadedData={() => setReady(true)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onError={() => setFailed(true)}
+              onClick={togglePlayback}
+            />
+          )}
+
+          {/* Placeholder while the first frames buffer */}
+          {!ready && !failed && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-surface-container-high to-surface-container">
+              <span className="w-9 h-9 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
               <span className="font-label-sm text-label-sm text-on-surface-variant">
-                Received 08:24 AM via Web Form
+                Loading the walkthrough…
               </span>
             </div>
-            <h2 className="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">
-              Jordan Lee · Leaking bathroom tap · Brunswick, VIC
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Readiness Indicator (animates during analysis) */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container">
-              <div className="relative w-7 h-7 flex items-center justify-center">
-                <svg className="w-7 h-7 -rotate-90" viewBox="0 0 36 36">
-                  <circle
-                    className="text-outline-variant/30"
-                    cx="18"
-                    cy="18"
-                    fill="none"
-                    r="14"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  ></circle>
-                  <circle
-                    className="text-primary-container transition-all duration-300"
-                    cx="18"
-                    cy="18"
-                    fill="none"
-                    r="14"
-                    stroke="currentColor"
-                    strokeDasharray="88"
-                    strokeDashoffset={dashOffset}
-                    strokeWidth="3"
-                  ></circle>
-                </svg>
-                <span className="absolute font-data-mono text-[9px] font-bold text-on-surface">
-                  {progress}%
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-label-sm text-[10px] text-on-surface-variant leading-none">
-                  SCOPE READINESS
-                </span>
-                <span className="font-label-md text-label-md text-on-surface font-bold">
-                  {analysed ? "Needs Info" : stage === "analysing" ? "Analysing…" : "New enquiry"}
-                </span>
-              </div>
+          )}
+
+          {/* If the file cannot be decoded, hand off to the live demo instead */}
+          {failed && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <span className="material-symbols-outlined text-[30px] text-on-surface-variant">
+                videocam_off
+              </span>
+              <span className="font-headline-sm text-headline-sm text-on-surface">
+                The walkthrough could not load
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+                Open the live demo to run the same intake, analysis and follow-up flow yourself.
+              </span>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors"
+              >
+                <span>Open live demo</span>
+                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+              </Link>
             </div>
-            {/* Status Badge */}
-            <div
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-label-md text-label-md font-semibold transition-colors ${
-                analysed
-                  ? "bg-[#FEF3C7] text-[#92400E]"
-                  : "bg-surface-container-high text-on-surface-variant"
+          )}
+
+          {/* Play/pause — always shown while paused, on hover while playing */}
+          {!failed && (
+            <button
+              type="button"
+              onClick={togglePlayback}
+              aria-label={playing ? "Pause the walkthrough" : "Play the walkthrough"}
+              className={`absolute bottom-3 right-3 w-10 h-10 rounded-full bg-black/55 text-white backdrop-blur-sm flex items-center justify-center transition-opacity duration-200 hover:bg-black/75 ${
+                playing ? "opacity-0 group-hover/video:opacity-100 focus-visible:opacity-100" : "opacity-100"
               }`}
             >
-              {stage === "analysing" ? (
-                <span className="material-symbols-outlined text-[16px] text-primary animate-spin">
-                  progress_activity
-                </span>
-              ) : (
-                <span
-                  className={`material-symbols-outlined text-[16px] ${analysed ? "text-[#D97706]" : "text-outline"}`}
-                >
-                  {analysed ? "warning" : "inbox"}
-                </span>
-              )}
-              <span>
-                {analysed
-                  ? "Inspection recommended"
-                  : stage === "analysing"
-                    ? "Analysing intake…"
-                    : "Awaiting analysis"}
+              <span className="material-symbols-outlined text-[20px]">
+                {playing ? "pause" : "play_arrow"}
               </span>
-            </div>
-          </div>
-        </div>
-        {/* Two-column Work Surface inside Mockup */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 bg-surface-container-low/40">
-          {/* Left Side: Known Details & Missing Scope */}
-          <div className="lg:col-span-7 p-4 sm:p-6 flex flex-col gap-6">
-            {/* Verified Facts Section */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-label-md text-label-md text-on-surface font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-primary text-[18px]">
-                    verified
-                  </span>
-                  Known details (Customer Provided)
-                </h3>
-                <span className="font-label-sm text-label-sm text-primary font-medium">
-                  4 Verified Facts
-                </span>
-              </div>
-              <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between text-body-sm font-body-sm py-1">
-                  <span className="text-on-surface-variant">Customer Contact</span>
-                  <span className="font-data-mono text-on-surface font-medium">
-                    Jordan Lee (0412 884 •••)
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-body-sm font-body-sm py-1">
-                  <span className="text-on-surface-variant">Job Location</span>
-                  <span className="font-body-sm text-on-surface font-medium">
-                    Brunswick, VIC 3056
-                  </span>
-                </div>
-                {/* Fixture Verification with Thumbnail 1 */}
-                <div className="flex items-start justify-between text-body-sm font-body-sm pt-2">
-                  <div className="flex flex-col">
-                    <span className="text-on-surface font-medium">Fixture: Basin Mixer Tap</span>
-                    <span className="text-on-surface-variant font-label-sm text-label-sm">
-                      Single lever chrome unit with aerator drip
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container text-primary font-medium">
-                      Photo 1 verified
-                    </span>
-                    <div className="w-10 h-10 rounded-md overflow-hidden bg-surface-container-high shrink-0 shadow-sm">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        alt="Basin mixer tap drip verification"
-                        className="w-full h-full object-cover"
-                        src="/demo/tap-1.jpg"
-                      />
-                    </div>
-                  </div>
-                </div>
-                {/* Access Verification with Thumbnail 2 */}
-                <div className="flex items-start justify-between text-body-sm font-body-sm pt-2">
-                  <div className="flex flex-col">
-                    <span className="text-on-surface font-medium">
-                      Access: Under-vanity Cupboard
-                    </span>
-                    <span className="text-on-surface-variant font-label-sm text-label-sm">
-                      Twin braided flexi hoses &amp; PVC S-trap visible
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container text-primary font-medium">
-                      Photo 2 verified
-                    </span>
-                    <div className="w-10 h-10 rounded-md overflow-hidden bg-surface-container-high shrink-0 shadow-sm">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        alt="Under vanity cupboard plumbing access"
-                        className="w-full h-full object-cover"
-                        src="/demo/tap-2.jpg"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Missing Scope Checklist (appears after analysis) */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-label-md text-label-md text-on-surface font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#D97706] text-[18px]">
-                    pending_actions
-                  </span>
-                  Missing information ({analysed ? "3" : "…"} Pending flags)
-                </h3>
-                {analysed && (
-                  <span className="font-label-sm text-label-sm text-[#B91C1C] font-semibold">
-                    Blocks Fixed Quote
-                  </span>
-                )}
-              </div>
-              {analysed ? (
-                <div className="space-y-2">
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-[#FEF3C7]/40 hero-flag">
-                    <span className="material-symbols-outlined text-[#D97706] text-[20px] shrink-0 mt-0.5">
-                      error_outline
-                    </span>
-                    <div className="flex-1">
-                      <p className="font-label-md text-label-md text-[#92400E]">
-                        Cartridge manufacturer code unconfirmed
-                      </p>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                        Cannot determine if 35mm / 40mm European disc or complete mixer replacement
-                        required.
-                      </p>
-                    </div>
-                    <span className="text-label-sm font-label-sm bg-[#FEF3C7] text-[#92400E] px-2 py-0.5 rounded uppercase font-semibold">
-                      High risk
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-surface-container-lowest hero-flag">
-                    <span className="material-symbols-outlined text-outline text-[20px] shrink-0 mt-0.5">
-                      radio_button_unchecked
-                    </span>
-                    <div className="flex-1">
-                      <p className="font-label-md text-label-md text-on-surface">
-                        Water isolation valve condition unverified
-                      </p>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                        Mini-stops visible but calcification grade unknown. Main meter shutoff may
-                        be required.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-[#FEE2E2]/50 hero-flag">
-                    <span className="material-symbols-outlined text-[#B91C1C] text-[20px] shrink-0 mt-0.5">
-                      water_damage
-                    </span>
-                    <div className="flex-1">
-                      <p className="font-label-md text-label-md text-[#B91C1C]">
-                        Concealed cabinet floor moisture status unconfirmed
-                      </p>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                        Photo 2 hints at timber swelling beneath S-trap collar. Risk of structural
-                        floor replacement.
-                      </p>
-                    </div>
-                    <span className="text-label-sm font-label-sm bg-[#FEE2E2] text-[#B91C1C] px-2 py-0.5 rounded font-semibold">
-                      Variation Risk
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-surface-container-lowest p-4 shadow-sm flex items-center gap-3">
-                  {stage === "analysing" ? (
-                    <>
-                      <span className="material-symbols-outlined text-primary text-[20px] animate-spin">
-                        progress_activity
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-label-md text-label-md text-on-surface">
-                          Analysing enquiry &amp; photos…
-                        </p>
-                        <div className="w-full h-1.5 bg-surface-container rounded-full mt-2 overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all duration-200"
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                      <span className="font-data-mono text-label-sm text-primary font-semibold">
-                        {progress}%
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-outline text-[20px]">
-                        hourglass_empty
-                      </span>
-                      <p className="font-label-md text-label-md text-on-surface-variant">
-                        Flags will appear here after the scope analysis runs.
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Right Side: AI Follow-up Draft & Action Deck */}
-          <div className="lg:col-span-5 p-4 sm:p-6 bg-surface-container-lowest flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary-container"></span>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                    Customer follow-up draft
-                  </h3>
-                </div>
-                <span className="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
-                  {stage === "sent" ? "Approved" : analysed ? "Ready for Review" : "Pending"}
-                </span>
-              </div>
-              {/* Generated Message Bubble */}
-              {analysed ? (
-                <div
-                  className={`bg-surface-container-low rounded-xl p-4 mb-4 font-body-md text-body-md text-on-surface leading-relaxed relative border-2 transition-colors ${
-                    stage === "sent" ? "border-[#15803D]/40" : "border-transparent"
-                  }`}
-                >
-                  <div className="absolute -top-2 left-6 w-3 h-3 bg-surface-container-low rotate-45"></div>
-                  {stage === "sent" ? (
-                    <>
-                      <span className="inline-flex items-center gap-1.5 font-label-md text-label-md text-[#15803D] font-semibold mb-2">
-                        <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                        Follow-up approved — logged to the audit timeline
-                      </span>
-                      <p className="text-on-surface-variant font-body-sm text-body-sm">
-                        Nothing was sent automatically. Send through your usual customer channel.
-                      </p>
-                    </>
-                  ) : (
-                    <p>
-                      {typed}
-                      <span className="inline-block w-2 h-4 bg-primary ml-0.5 animate-pulse align-middle"></span>
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-surface-container-low/60 rounded-xl p-4 mb-4 border-2 border-dashed border-outline-variant/40">
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    {stage === "analysing"
-                      ? "Drafting the customer follow-up from the extracted scope…"
-                      : "The draft message will be generated here once the analysis completes."}
-                  </p>
-                </div>
-              )}
-              {/* Scope Recommendation pill */}
-              {analysed && (
-                <div className="bg-surface-container-highest/60 rounded-lg p-3 mb-4 flex items-center justify-between text-body-sm font-body-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-[18px]">rule</span>
-                    <span className="text-on-surface">Suggested Job Type:</span>
-                  </div>
-                  <span className="font-label-md text-label-md font-bold text-primary-container">
-                    Book On-Site Inspection (45 min)
-                  </span>
-                </div>
-              )}
-              {/* Success notification chip */}
-              {stage === "sent" && (
-                <div className="hero-notification p-3 rounded-xl bg-[#DCFCE7] border border-[#BBF7D0] flex items-center gap-2.5 mb-4">
-                  <span className="material-symbols-outlined text-[#15803D] text-[20px]">
-                    notifications_active
-                  </span>
-                  <div className="flex flex-col">
-                    <span className="font-label-md text-label-md text-[#15803D] font-semibold">
-                      Notification: follow-up approved
-                    </span>
-                    <span className="font-body-sm text-body-sm text-[#15803D]/80">
-                      Audit event recorded · Alex Miller (Owner / Plumber)
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Dispatcher Control Buttons (interactive) */}
-            <div className="pt-4 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  className="h-10 px-3 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors flex items-center justify-center gap-1"
-                  onClick={replay}
-                  type="button"
-                >
-                  <span className="material-symbols-outlined text-[16px]">replay</span>
-                  <span>Replay demo</span>
-                </button>
-                {stage === "intake" ? (
-                  <button
-                    className="h-10 px-3 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-colors flex items-center justify-center gap-1 shadow-sm"
-                    onClick={runAnalysis}
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">bolt</span>
-                    <span>Run analysis</span>
-                  </button>
-                ) : (
-                  <button
-                    className={`h-10 px-3 rounded-lg font-label-md text-label-md transition-colors flex items-center justify-center gap-1 shadow-sm ${
-                      stage === "scoped"
-                        ? "bg-primary-container text-on-primary hover:bg-primary"
-                        : "bg-[#DCFCE7] text-[#15803D]"
-                    }`}
-                    onClick={stage === "scoped" ? approve : replay}
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {stage === "scoped" ? "send" : "check_circle"}
-                    </span>
-                    <span>
-                      {stage === "analysing"
-                        ? "Analysing…"
-                        : stage === "scoped"
-                          ? "Approve follow-up"
-                          : "Approved"}
-                    </span>
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center justify-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm pt-2">
-                <span className="material-symbols-outlined text-[14px]">shield</span>
-                <span>Approval logs to audit timeline. No automated dispatch.</span>
-              </div>
-            </div>
-          </div>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -744,9 +367,9 @@ export function LandingPage() {
                 Built for human review. No automatic pricing. No automatic customer messages.
               </span>
             </div>
-            {/* Interactive Hero Mockup — click "Run analysis", then "Approve follow-up" */}
+            {/* Recorded product walkthrough — autoplays muted and loops */}
             <div className="hero-el w-full flex justify-center">
-              <HeroShowcase />
+              <HeroDemoVideo />
             </div>
           </div>
         </section>
