@@ -429,7 +429,14 @@ export function WorkspaceShell({
 
       <div className={cn("flex min-h-dvh flex-col", collapsed ? "lg:pl-[76px]" : "lg:pl-64")}>
         {/* Top Navigation Rail */}
-        <header className="fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between gap-3 px-3 sm:px-space-lg lg:left-64">
+        <header
+          className={cn(
+            // the rail tracks the sidebar width so the search bar never sits
+            // under a collapsed/expanded sidebar edge
+            "fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between gap-3 px-3 sm:px-space-lg transition-[left] duration-200",
+            collapsed ? "lg:left-[76px]" : "lg:left-64",
+          )}
+        >
           <div className="flex items-center gap-space-md min-w-0">
             <button
               type="button"

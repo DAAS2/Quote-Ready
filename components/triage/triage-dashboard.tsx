@@ -382,28 +382,28 @@ export function TriageDashboard({
         </div>
         {/* Data Table Layout */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left">
+          <table className="w-full min-w-[720px] xl:min-w-0 text-left">
             <thead>
               <tr className="bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
-                <th className="py-3 px-5 font-label-sm" scope="col">
+                <th className="py-3 pl-4 pr-3 font-label-sm" scope="col">
                   Customer &amp; Contact
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[200px] md:min-w-[280px]" scope="col">
+                <th className="py-3 px-3 font-label-sm min-w-[180px] 2xl:min-w-[260px]" scope="col">
                   Job Issue &amp; Scope Details
                 </th>
-                <th className="hidden py-3 px-4 font-label-sm sm:table-cell" scope="col">
+                <th className="hidden py-3 px-3 font-label-sm xl:table-cell" scope="col">
                   Location
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[170px] md:min-w-[220px]" scope="col">
+                <th className="py-3 px-3 font-label-sm min-w-[150px] 2xl:min-w-[210px]" scope="col">
                   Scope Readiness
                 </th>
-                <th className="hidden py-3 px-4 font-label-sm md:table-cell" scope="col">
+                <th className="hidden py-3 px-3 font-label-sm lg:table-cell" scope="col">
                   Triage Status
                 </th>
-                <th className="hidden py-3 px-4 font-label-sm whitespace-nowrap lg:table-cell" scope="col">
+                <th className="hidden py-3 px-3 font-label-sm whitespace-nowrap 2xl:table-cell" scope="col">
                   Last Updated
                 </th>
-                <th className="py-3 px-5 text-right font-label-sm" scope="col">
+                <th className="py-3 pl-3 pr-4 text-right font-label-sm" scope="col">
                   Action
                 </th>
               </tr>
@@ -414,7 +414,7 @@ export function TriageDashboard({
                   key={row.id}
                   className="hover:bg-surface-container-low/40 transition-colors group"
                 >
-                  <td className="py-4 px-5 align-top">
+                  <td className="py-4 pl-4 pr-3 align-top">
                     <div className="flex items-start gap-2.5">
                       <div
                         className={cn(
@@ -434,12 +434,12 @@ export function TriageDashboard({
                       </div>
                     </div>
                   </td>
-                  <td className="py-4 px-4 align-top">
+                  <td className="py-4 px-3 align-top">
                     <div className="font-body-md text-body-md text-on-surface font-medium">
                       {row.title}
                     </div>
                     {row.chips.length > 0 && (
-                      <div className="flex items-center gap-2 mt-1 font-body-sm text-body-sm text-on-surface-variant">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 font-body-sm text-body-sm text-on-surface-variant">
                         {row.chips.map((chip) => (
                           <span
                             key={chip.label}
@@ -459,17 +459,17 @@ export function TriageDashboard({
                       </div>
                     )}
                   </td>
-                  <td className="hidden py-4 px-4 align-top whitespace-nowrap sm:table-cell">
+                  <td className="hidden py-4 px-3 align-top whitespace-nowrap xl:table-cell">
                     <div className="font-body-md text-body-md text-on-surface">{row.suburb}</div>
                     <div className="font-body-sm text-body-sm text-on-surface-variant">
                       {row.postcode}
                     </div>
                   </td>
-                  <td className="py-4 px-4 align-top">
+                  <td className="py-4 px-3 align-top">
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between font-label-sm text-label-sm">
-                        <span className="text-on-surface-variant">Scope completeness</span>
-                        <span className={cn("font-data-mono font-semibold", {
+                      <div className="flex items-center justify-between gap-2 font-label-sm text-label-sm">
+                        <span className="text-on-surface-variant truncate">Scope completeness</span>
+                        <span className={cn("font-data-mono font-semibold shrink-0", {
                           "text-secondary": row.readinessTone === "secondary",
                           "text-primary": row.readinessTone === "primary",
                           "text-error": row.readinessTone === "error",
@@ -495,7 +495,7 @@ export function TriageDashboard({
                       </span>
                     </div>
                   </td>
-                  <td className="hidden py-4 px-4 align-top whitespace-nowrap md:table-cell">
+                  <td className="hidden py-4 px-3 align-top whitespace-nowrap lg:table-cell">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-medium",
@@ -508,10 +508,10 @@ export function TriageDashboard({
                       {row.statusLabel}
                     </span>
                   </td>
-                  <td className="hidden py-4 px-4 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant lg:table-cell">
+                  <td className="hidden py-4 px-3 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant 2xl:table-cell">
                     {row.updatedAt}
                   </td>
-                  <td className="py-4 px-5 align-top text-right whitespace-nowrap">
+                  <td className="py-4 pl-3 pr-4 align-top text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
                       <Link
                         href={`/jobs/${row.id}`}
@@ -520,7 +520,7 @@ export function TriageDashboard({
                           row.actionButton,
                         )}
                       >
-                        <span className="hidden sm:inline">Review scope</span>
+                        <span className="hidden md:inline">Review scope</span>
                         <span className="material-symbols-outlined text-[16px]">chevron_right</span>
                       </Link>
                       <button
@@ -541,7 +541,7 @@ export function TriageDashboard({
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td className="py-10 px-5 text-center" colSpan={7}>
+                  <td className="py-10 px-4 text-center" colSpan={7}>
                     {totalActive === 0 && emptyState ? (
                       <div className="flex flex-col items-center gap-3 py-4">
                         <div className="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center">
