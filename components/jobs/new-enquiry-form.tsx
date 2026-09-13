@@ -440,7 +440,7 @@ export function NewEnquiryForm() {
             <div className="flex flex-col gap-space-md">
               <div className="flex items-center gap-space-sm pb-space-xs">
                 <span className="material-symbols-outlined text-primary-container text-[20px]">
-                  plumbing
+                  handyman
                 </span>
                 <h2 className="font-headline-md text-headline-md text-on-surface">2. Job details</h2>
               </div>

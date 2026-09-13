@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import { FollowUpModal } from "@/components/jobs/follow-up-modal";
 import { AddEvidencePanel } from "@/components/jobs/add-evidence-panel";
+import { JobSectionNav } from "@/components/jobs/job-section-nav";
 import type { DraftRow } from "@/lib/data/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -54,6 +55,8 @@ interface DetailProps {
     reasons: string[];
   };
   assumptions: string[];
+  exclusions: string[];
+  inspectionTriggers: string[];
   nextActions: Array<{ key: string; label: string }>;
   versions: Array<{
     version: number;
@@ -108,6 +111,14 @@ export function JobDetailView(props: DetailProps) {
   }
 
   const isV2 = (props.scopeVersion ?? 1) >= 2 && props.versions.length >= 2;
+
+  const sectionItems = [
+    { id: "sec-required", label: "Required details", count: props.knownFacts.length },
+    { id: "sec-triggers", label: "Inspection triggers", count: props.inspectionTriggers.length },
+    { id: "sec-assumptions", label: "Assumptions", count: props.assumptions.length },
+    { id: "sec-exclusions", label: "Exclusions", count: props.exclusions.length },
+    { id: "sec-missing", label: "Still needed", count: props.missingFields.length },
+  ].filter((s) => s.count > 0 || s.id === "sec-required");
 
   async function approveScope() {
     setBusy("approve");
@@ -451,6 +462,9 @@ export function JobDetailView(props: DetailProps) {
         </section>
       )}
 
+      {/* Section navbar — one tap per scope section */}
+      {props.hasScope && sectionItems.length > 1 && <JobSectionNav items={sectionItems} />}
+
       {/* Two-Column Operational Layout */}
       <div className={`grid grid-cols-1 xl:grid-cols-12 gap-space-lg ${isV2 ? "lg:grid-cols-12" : ""}`}>
         {/* LEFT COLUMN */}
@@ -458,7 +472,10 @@ export function JobDetailView(props: DetailProps) {
           {isV2 ? (
             <>
               {/* v2 Card 1: Latest Evidence Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-required"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-center justify-between border-b-0 pb-1">
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded bg-primary-fixed text-on-primary-fixed flex items-center justify-center">
@@ -888,12 +905,15 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: What we know */}
               {props.knownFacts.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-required"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#15803D]"></span>
                       <h2 className="font-headline-md text-headline-md text-on-surface">
-                        What we know
+                        Required details
                       </h2>
                     </div>
                     <span className="font-data-mono text-label-sm text-on-surface-variant">
@@ -925,7 +945,10 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: Still needed before fixed estimate */}
               {props.missingFields.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-missing"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#D97706]"></span>
@@ -982,7 +1005,10 @@ export function JobDetailView(props: DetailProps) {
           {isV2 ? (
             <>
               {/* v2 Card 1: Strong Amber/Red Recommendation Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-triggers"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-start gap-space-sm">
                   <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 shadow-sm">
                     <span className="material-symbols-outlined text-[24px]">warning</span>
@@ -1030,7 +1056,10 @@ export function JobDetailView(props: DetailProps) {
               </section>
 
               {/* v2 Card 2: Next Best Action Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-missing"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-center justify-between">
                   <h3 className="font-headline-sm text-headline-sm text-on-surface">
                     Recommended Next Action
@@ -1097,6 +1126,58 @@ export function JobDetailView(props: DetailProps) {
                   </button>
                 </div>
               </section>
+
+              {/* v2 Card: Assumptions & exclusions */}
+              {(props.assumptions.length > 0 || props.exclusions.length > 0) && (
+                <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                  <div
+                    id="sec-assumptions"
+                    className="flex flex-col gap-2.5 scroll-mt-32"
+                  >
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Assumptions
+                    </h3>
+                    {props.assumptions.length === 0 && (
+                      <p className="font-body-sm text-body-sm text-on-surface-variant">
+                        None recorded for this scope.
+                      </p>
+                    )}
+                    {props.assumptions.map((item, index) => (
+                      <div key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          check
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          {item}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    id="sec-exclusions"
+                    className="flex flex-col gap-2.5 pt-3 border-t border-border scroll-mt-32"
+                  >
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Exclusions
+                    </h3>
+                    {props.exclusions.length === 0 && (
+                      <p className="font-body-sm text-body-sm text-on-surface-variant">
+                        None recorded for this scope.
+                      </p>
+                    )}
+                    {props.exclusions.map((item, index) => (
+                      <div key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          close
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          {item}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           ) : (
             <>
@@ -1174,10 +1255,13 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: Scope assumptions */}
               {props.assumptions.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-assumptions"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                      Scope assumptions
+                      Assumptions
                     </h3>
                     <button
                       className="w-8 h-8 rounded-lg hover:bg-surface-container-low text-on-surface-variant flex items-center justify-center transition-colors"
@@ -1203,6 +1287,63 @@ export function JobDetailView(props: DetailProps) {
                       Assumptions apply until tradie site inspection
                     </span>
                   </div>
+                </article>
+              )}
+
+              {/* v1 Card: Inspection triggers */}
+              {props.inspectionTriggers.length > 0 && (
+                <article
+                  id="sec-triggers"
+                  className="bg-[#FFFBEB] rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-headline-sm text-headline-sm text-[#92400E] font-semibold">
+                      Inspection triggers
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] font-data-mono text-label-sm font-semibold">
+                      {props.inspectionTriggers.length} active
+                    </span>
+                  </div>
+                  <ul className="flex flex-col gap-2.5">
+                    {props.inspectionTriggers.map((trigger, index) => (
+                      <li key={`${trigger}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-[#D97706] text-[18px] shrink-0 mt-0.5">
+                          warning_amber
+                        </span>
+                        <span className="font-body-sm text-body-sm text-[#92400E]">{trigger}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="font-label-sm text-label-sm text-[#92400E]/80">
+                    Any active trigger locks fixed pricing until the trigger is cleared on site.
+                  </p>
+                </article>
+              )}
+
+              {/* v1 Card: Exclusions */}
+              {props.exclusions.length > 0 && (
+                <article
+                  id="sec-exclusions"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Exclusions
+                    </h3>
+                    <span className="font-data-mono text-label-sm text-on-surface-variant">
+                      {props.exclusions.length} items
+                    </span>
+                  </div>
+                  <ul className="flex flex-col gap-2.5 font-body-sm text-body-sm text-on-surface-variant">
+                    {props.exclusions.map((item, index) => (
+                      <li key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          close
+                        </span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               )}
 

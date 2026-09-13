@@ -175,7 +175,7 @@ export default async function MessagesPage() {
         <div className="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
           <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
           <span>
-            <strong>Plumber verified:</strong> Approving a follow-up only records the decision —
+            <strong>Tradie verified:</strong> Approving a follow-up only records the decision —
             QuoteReady never sends messages on your behalf.
           </span>
         </div>

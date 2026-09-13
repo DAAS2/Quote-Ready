@@ -27,9 +27,9 @@ const DEFAULT_DEPOSIT_PERCENT = 0;
 /** Business identity for the quote header, from the profile when signed in. */
 export function resolveQuoteBusiness(profile: ServerProfile | null): QuoteBusiness {
   return {
-    name: profile?.business_name?.trim() || "Melbourne Metro Plumbing",
+    name: profile?.business_name?.trim() || "Your business",
     abn: "",
-    licence: "48291",
+    licence: "",
     phone: "",
     email: profile?.email ?? "",
     address: profile?.service_area ?? "",
@@ -37,7 +37,7 @@ export function resolveQuoteBusiness(profile: ServerProfile | null): QuoteBusine
 }
 
 export function resolvePreparedBy(profile: ServerProfile | null): string {
-  return profile?.full_name?.trim() || "Alex Miller";
+  return profile?.full_name?.trim() || "Your operator";
 }
 
 export interface PrepareQuoteInput {

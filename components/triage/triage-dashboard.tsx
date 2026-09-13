@@ -39,9 +39,13 @@ export function TriageDashboard({
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [suburb, setSuburb] = useState("All Suburbs");
-  const [sort, setSort] = useState<"updated" | "readiness" | "urgency">("updated");
+  const [sort, setSort] = useState<"attention" | "updated" | "readiness" | "urgency">(
+    "attention",
+  );
   const [page, setPage] = useState(1);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<string | null>(voiceJobId);
 
   const suburbs = useMemo(
     () => Array.from(new Set(rows.map((r) => r.suburb).filter(Boolean))).sort(),
@@ -69,7 +73,18 @@ export function TriageDashboard({
     if (suburb !== "All Suburbs") out = out.filter((r) => r.suburb === suburb);
     if (sort === "readiness") out = [...out].sort((a, b) => b.readiness - a.readiness);
     else if (sort === "urgency") out = [...out].sort((a, b) => a.updatedAtMs - b.updatedAtMs);
-    else out = [...out].sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+    else if (sort === "attention") {
+      // surface what actually needs a human: safety/incomplete first, then
+      // newest activity, so real jobs needing attention rise to the top
+      const weight = (r: TriageRow) => {
+        if (r.statusLabel === "Attention required") return 0;
+        if (r.statusLabel === "Needs information") return 1;
+        if (r.statusLabel === "Inspection recommended") return 2;
+        if (r.statusLabel === "Ready for estimate") return 3;
+        return 4;
+      };
+      out = [...out].sort((a, b) => weight(a) - weight(b) || b.updatedAtMs - a.updatedAtMs);
+    } else out = [...out].sort((a, b) => b.updatedAtMs - a.updatedAtMs);
     return out;
   }, [rows, tab, search, suburb, sort]);
 
@@ -118,13 +133,13 @@ export function TriageDashboard({
             </div>
           )}
           <button
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors"
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors disabled:opacity-50"
             type="button"
-            onClick={() => setVoiceOpen(true)}
-            disabled={!voiceJobId}
+            onClick={() => setVoicePickerOpen(true)}
+            disabled={rows.length === 0}
           >
             <span className="material-symbols-outlined text-tertiary text-[20px]">mic</span>
-            <span>Import voice note</span>
+            <span>Add voice note to…</span>
           </button>
           <Link
             data-tour="new-enquiry"
@@ -329,6 +344,7 @@ export function TriageDashboard({
                 onChange={(e) => setSort(e.target.value as typeof sort)}
                 className="h-9 pl-3 pr-8 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md appearance-none focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
               >
+                <option value="attention">Sort: Needs attention first</option>
                 <option value="updated">Sort: Last updated</option>
                 <option value="readiness">Sort: Readiness high-to-low</option>
                 <option value="urgency">Sort: Urgency (Oldest first)</option>
@@ -587,11 +603,75 @@ export function TriageDashboard({
         </div>
       </div>
 
-      {/* Import voice note → record-site-note modal for the newest job */}
-      {voiceOpen && voiceJobId && (
+      {/* Pick which job the voice note belongs to */}
+      {voicePickerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-[#102A43]/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setVoicePickerOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose a job for the voice note"
+        >
+          <div
+            className="w-full max-w-lg bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-tertiary text-[20px]">mic</span>
+                <div className="flex flex-col">
+                  <span className="font-headline-sm text-headline-sm text-on-surface">
+                    Which job is this voice note for?
+                  </span>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">
+                    The recording is transcribed and folded into that job&apos;s scope.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setVoicePickerOpen(false)}
+                className="p-1.5 rounded-lg text-outline hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto custom-scroll">
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => {
+                    setVoiceTarget(row.id);
+                    setVoicePickerOpen(false);
+                    setVoiceOpen(true);
+                  }}
+                  className="w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-surface-container-low transition-colors border-b border-border/60 last:border-b-0"
+                >
+                  <span className="flex flex-col min-w-0">
+                    <span className="font-label-lg text-label-lg text-on-surface truncate">
+                      {row.name} · {row.title}
+                    </span>
+                    <span className="font-data-mono text-label-sm text-on-surface-variant">
+                      {displayRef(row.id)} · {row.suburb}
+                    </span>
+                  </span>
+                  <span className={cn("px-2 py-0.5 rounded-full font-label-sm text-label-sm", row.statusPill)}>
+                    {row.statusLabel}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record the note against the chosen job */}
+      {voiceOpen && voiceTarget && (
         <RecordSiteNoteModal
-          jobId={voiceJobId}
-          jobRef={displayRef(voiceJobId)}
+          jobId={voiceTarget}
+          jobRef={displayRef(voiceTarget)}
           onClose={() => setVoiceOpen(false)}
           onApplied={(id) => {
             setVoiceOpen(false);

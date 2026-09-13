@@ -557,6 +557,8 @@ function HeroShowcase() {
 }
 
 export function LandingPage() {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useGSAP(
     () => {
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -612,12 +614,20 @@ export function LandingPage() {
           scrollTrigger: { trigger: group, start: "top 80%", once: true },
         });
       });
+
+      ScrollTrigger.refresh();
+
+      return () => {
+        // kill any triggers this page created so a route change can never
+        // leave a dangling ScrollTrigger (which throws on the next tick)
+        ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+      };
     },
-    { scope: undefined },
+    { scope: rootRef },
   );
 
   return (
-    <div id="top" className="bg-surface font-body-md text-body-md text-on-surface">
+    <div id="top" ref={rootRef} className="bg-surface font-body-md text-body-md text-on-surface">
       <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div className="h-16 max-w-7xl mx-auto px-margin flex items-center justify-between gap-space-lg">
           <Link className="flex items-center gap-space-sm" href="/#top">

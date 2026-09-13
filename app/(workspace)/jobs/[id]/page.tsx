@@ -333,6 +333,8 @@ export default async function JobDetailPage({
         ].slice(0, 3),
       }}
       assumptions={scope?.assumptions ?? []}
+      exclusions={scope?.exclusions ?? []}
+      inspectionTriggers={(scope?.risk_flags ?? []).map((f) => f.label)}
       nextActions={(scope?.missing_fields.filter((m) => m.ask_customer) ?? [])
         .slice(0, 3)
         .map((m) => ({

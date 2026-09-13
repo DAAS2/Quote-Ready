@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveBusinessProfile, loadBusinessProfile, type BusinessProfile } from "@/lib/auth/session";
 import { useSession } from "@/lib/auth/session";
+import { requestTour } from "@/lib/onboarding/tour";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Settings — restyled to the Calm Trade Precision design tokens (no dedicated
@@ -23,7 +24,7 @@ const TRADES = [
   "Other trade",
 ];
 
-export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }) {
+export function SettingsPage() {
   const router = useRouter();
   const { user, signOut } = useSession();
   const [signingOut, setSigningOut] = useState(false);
@@ -34,7 +35,6 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
     ...(loadBusinessProfile() ?? {}),
   }));
   const [saved, setSaved] = useState(false);
-  const [resetting, setResetting] = useState(false);
 
   function save() {
     saveBusinessProfile(profile);
@@ -83,18 +83,10 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
     }
   }
 
-  async function resetDemo() {
-    setResetting(true);
-    try {
-      const res = await fetch("/api/demo/reset", { method: "POST" });
-      if (!res.ok) throw new Error("Reset failed.");
-      toast.success("Demo workspace reset to the seeded jobs.");
-      router.refresh();
-    } catch {
-      toast.error("Reset failed — please try again.");
-    } finally {
-      setResetting(false);
-    }
+  function replayTour() {
+    requestTour();
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (
@@ -110,7 +102,7 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
           <div>
             <h1 className="font-headline-lg text-headline-lg text-on-surface">Workspace settings</h1>
             <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">
-              Business details, onboarding and demo controls.
+              Business details, account and workspace preferences.
             </p>
           </div>
         </div>
@@ -236,10 +228,10 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className="h-10 px-4 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-lg text-label-lg transition-colors"
-                onClick={() => router.push("/onboarding")}
+                onClick={replayTour}
                 type="button"
               >
-                Replay setup wizard
+                Replay guided tour
               </button>
               <button
                 className="h-10 px-4 rounded-lg bg-surface-container-lowest border border-border hover:bg-error-container/40 hover:text-error hover:border-error/30 text-on-surface font-label-lg text-label-lg transition-colors disabled:opacity-60"
@@ -277,56 +269,6 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
         )}
       </section>
 
-      {/* Workspace & data */}
-      <section className="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col gap-space-md">
-        <div className="flex items-center gap-2.5">
-          <span className="material-symbols-outlined text-primary-container text-[20px]">
-            database
-          </span>
-          <h2 className="font-headline-md text-headline-md text-on-surface">Data &amp; demo</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="p-3 rounded-lg bg-surface-container-low flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                Data source
-              </span>
-              <span className="font-body-md text-body-md text-on-surface font-medium">
-                {storeKind === "supabase" ? "Supabase (persistent)" : "Local demo (in-memory)"}
-              </span>
-            </div>
-            <span
-              className={`w-2 h-2 rounded-full ${storeKind === "supabase" ? "bg-[#15803D]" : "bg-amber-500"}`}
-            ></span>
-          </div>
-          <div className="p-3 rounded-lg bg-surface-container-low flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                Licence
-              </span>
-              <span className="font-body-md text-body-md text-on-surface font-medium">
-                Lic. #48291 · Residential
-              </span>
-            </div>
-            <span className="material-symbols-outlined text-primary text-[18px]">verified</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <button
-            className="h-10 px-4 rounded-lg bg-surface-container-lowest border border-border hover:bg-error-container/40 hover:text-error hover:border-error/30 text-on-surface font-label-lg text-label-lg transition-colors disabled:opacity-60"
-            onClick={resetDemo}
-            disabled={resetting}
-            type="button"
-          >
-            {resetting ? "Resetting…" : "Reset demo workspace"}
-          </button>
-        </div>
-        <p className="font-label-sm text-label-sm text-on-surface-variant">
-          Resetting restores the seeded enquiries (Jordan, Priya, Sam and the wider backlog) and
-          clears every audit event.
-        </p>
-      </section>
-
       {/* Guardrail */}
       <div className="bg-surface-container-low rounded-xl p-space-md flex items-start gap-3">
         <span className="material-symbols-outlined text-primary text-[22px] shrink-0 mt-0.5">
@@ -334,10 +276,10 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
         </span>
         <div className="flex flex-col gap-1">
           <span className="font-label-md text-label-md text-on-surface font-semibold">
-            Tradie Oversight Guaranteed
+            Human review required
           </span>
           <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-            QuoteReady assists scope readiness. All prices and customer messages require tradie
+            QuoteReady assists scope readiness. All prices and customer messages require your
             approval before dispatch.
           </p>
         </div>
