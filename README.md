@@ -253,9 +253,6 @@ npm run test:coverage   # 91 tests + coverage thresholds
 npm run build           # production build
 ```
 
-## Demo video
-
-A 3–5 minute walkthrough script, shot list, fallbacks and judge Q&A preparation live in [DEMO_SCRIPT.md](./DEMO_SCRIPT.md). Submission copy and the 10 selection questions are answered in [SUBMISSION.md](./SUBMISSION.md). Security and privacy boundaries are in [SECURITY.md](./SECURITY.md).
 
 ## Known limitations
 
