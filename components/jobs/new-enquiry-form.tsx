@@ -4,11 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import type { TemplateRow } from "@/lib/data/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * New enquiry — transcribed 1:1 from the new-enquiry design.
  * Submits to POST /api/jobs (multipart with photos); "Analyse enquiry"
  * continues into the preparing-scope screen, "Save as draft" opens the job.
+ * Custom service templates (from /templates) appear as filing options and the
+ * analysis grades the enquiry against them.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 const JOB_TYPES: Array<{ label: string; value: string }> = [
@@ -18,6 +21,8 @@ const JOB_TYPES: Array<{ label: string; value: string }> = [
   { label: "Pipe leak / Burst pipe", value: "leaking_tap" },
   { label: "Rough-in renovation", value: "toilet_repair" },
 ];
+
+const CUSTOM_PREFIX = "custom:";
 
 const URGENCY_OPTIONS = [
   { label: "Standard", value: "standard" },
@@ -55,6 +60,14 @@ export function NewEnquiryForm() {
   const [ref, setRef] = useState("");
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [customTemplates, setCustomTemplates] = useState<TemplateRow[]>([]);
+
+  useEffect(() => {
+    fetch("/api/templates")
+      .then((r) => r.json())
+      .then((d) => setCustomTemplates(d.templates ?? []))
+      .catch(() => setCustomTemplates([]));
+  }, []);
 
   useEffect(() => {
     // mount-only: the enquiry ref is generated on the client so SSR and
@@ -73,6 +86,10 @@ export function NewEnquiryForm() {
     if (message.trim().length >= 30) score += 15;
     return Math.min(95, score);
   }, [customerName, phone, suburb, photos.length, message]);
+
+  const templateIdUsed = jobType.startsWith(CUSTOM_PREFIX)
+    ? jobType.slice(CUSTOM_PREFIX.length)
+    : null;
 
   function addPhotos(files: FileList | File[]) {
     const next = Array.from(files)
@@ -121,14 +138,17 @@ export function NewEnquiryForm() {
     }
     setSubmitting(kind);
     try {
+      const isCustom = jobType.startsWith(CUSTOM_PREFIX);
+      const custom = isCustom ? customTemplates.find((t) => t.id === jobType.slice(CUSTOM_PREFIX.length)) : null;
       const form = new FormData();
       form.set("customer_name", customerName.trim());
       form.set("phone", phone.trim());
       form.set("email", email.trim());
       form.set("suburb", suburb.trim());
-      form.set("job_type", JOB_TYPES.find((t) => t.label === jobType)?.value ?? "leaking_tap");
+      form.set("job_type", custom ? custom.base_type : JOB_TYPES.find((t) => t.label === jobType)?.value ?? "leaking_tap");
       form.set("intake_channel", "web_form");
       form.set("enquiry_text", composeEnquiryText());
+      if (custom) form.set("template_id", custom.id);
       photos.forEach((p) => form.append("images", p.file));
       const res = await fetch("/api/jobs", { method: "POST", body: form });
       const data = await res.json();
@@ -316,8 +336,19 @@ export function NewEnquiryForm() {
                       onChange={(e) => setJobType(e.target.value)}
                     >
                       {JOB_TYPES.map((t) => (
-                        <option key={t.label}>{t.label}</option>
+                        <option key={t.label} value={t.label}>
+                          {t.label}
+                        </option>
                       ))}
+                      {customTemplates.length > 0 && (
+                        <optgroup label="Your service templates">
+                          {customTemplates.map((t) => (
+                            <option key={t.id} value={`${CUSTOM_PREFIX}${t.id}`}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                     <span className="material-symbols-outlined absolute right-3 pointer-events-none text-on-surface-variant text-[18px]">
                       expand_more
@@ -453,6 +484,18 @@ export function NewEnquiryForm() {
                   Add voice note transcript
                 </button>
               </div>
+              {templateIdUsed && (
+                <div className="p-2.5 rounded-lg bg-surface-container flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[18px]">fact_check</span>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant">
+                    This enquiry will be graded against{" "}
+                    <strong className="text-on-surface font-semibold">
+                      {customTemplates.find((t) => t.id === templateIdUsed)?.name ?? "your template"}
+                    </strong>
+                    .
+                  </span>
+                </div>
+              )}
               {/* Drag and Drop Zone */}
               <div
                 className={`w-full p-6 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer group transition-colors ${

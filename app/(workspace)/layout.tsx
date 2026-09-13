@@ -1,17 +1,38 @@
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
-import { store } from "@/lib/data/jobs";
+import { store, ensureSeeded } from "@/lib/data/jobs";
+import { getServerProfile } from "@/lib/data/org";
 
 export default async function WorkspaceLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const jobs = await store.listJobs();
+  await ensureSeeded();
+  const [jobs, alerts, profile] = await Promise.all([
+    store.listJobs(),
+    store.listRecentAuditFeed(12).catch(() => []),
+    getServerProfile().catch(() => null),
+  ]);
+
   const jobsCount = jobs.filter((j) => j.status !== "closed").length;
   const messagesCount = jobs.filter((j) => j.status === "follow_up_drafted").length;
 
   return (
-    <WorkspaceShell jobsCount={jobsCount} messagesCount={messagesCount}>
+    <WorkspaceShell
+      jobsCount={jobsCount}
+      messagesCount={messagesCount}
+      alerts={alerts.map((a) => ({
+        id: a.id,
+        job_id: a.job_id,
+        job_name: a.job_name,
+        actor_type: a.actor_type,
+        event_type: a.event_type,
+        summary: a.summary,
+        created_at: a.created_at,
+      }))}
+      businessName={profile?.business_name || "Northside Plumbing"}
+      operatorName={profile?.full_name || "Alex Miller"}
+    >
       {children}
     </WorkspaceShell>
   );

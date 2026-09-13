@@ -91,6 +91,14 @@ export function buildVoiceUpdateUserPrompt(transcript: string): string {
   return `PLUMBER'S SPOKEN SITE NOTE:\n"${transcript}"`;
 }
 
+export const SITE_NOTE_TRANSCRIPTION_PROMPT = `Transcribe this spoken plumbing site note verbatim, in Australian English.
+
+Rules:
+1. Output ONLY the transcript text — no headers, no commentary, no quotation marks.
+2. Keep the speaker's own words. Do not summarise, correct or interpret.
+3. Use proper punctuation and sentence casing so the note reads clearly.
+4. Trade terms heard in the audio (mixer, cartridge, mini-stop, isolation valve, S-trap, braided hose) must be spelled exactly like that.`;
+
 export const BRIEFING_PROMPT = (summary: string) =>
   `You are QuoteReady's pre-call assistant. Compose a SHORT spoken briefing (4-6 sentences, plain language, no jargon, no prices) from this job state. Mention the customer's name, the readiness status, the top 1-3 things to ask or check, and the recommended next step. Do not diagnose or give safety advice; if there is a safety flag, say "this one needs safety attention" and stop.\n\nJOB STATE:\n${summary}`;
 

@@ -135,6 +135,7 @@ export async function apply_job_template_rules_and_score(
     recommended_questions: state.recommended_questions,
     version: Math.max(1, state.existing_version),
     produced_by: state.used_fallback ? "fallback" : state.produced_by === "fallback" ? "fallback" : "ai_analysis",
+    ...(state.template ? { template: state.template } : {}),
   });
   return { scope, override_reasons: scope.override_reasons };
 }

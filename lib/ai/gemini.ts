@@ -10,6 +10,7 @@ import {
 import {
   EXTRACTION_SYSTEM_PROMPT,
   VOICE_UPDATE_SYSTEM_PROMPT,
+  SITE_NOTE_TRANSCRIPTION_PROMPT,
   buildExtractionUserPrompt,
   buildVoiceUpdateUserPrompt,
   RECOMMENDATION_SYSTEM_PROMPT,
@@ -160,10 +161,46 @@ function tryExtractJsonObject(text: string): unknown | undefined {
   return undefined;
 }
 
+/* ── Audio transcription (recorded site note → verbatim transcript) ──────── */
+
+export async function transcribeSiteNote(input: {
+  mimeType: string;
+  base64: string;
+}): Promise<string> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: SITE_NOTE_TRANSCRIPTION_PROMPT },
+            { inlineData: { mimeType: input.mimeType, data: input.base64 } },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+  return text.trim();
+}
+
 /* ── Voice-note structured update ────────────────────────────────────────── */
 
-export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {
-  const ai = getClient();
+export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {  const ai = getClient();
 
   let text: string | undefined;
   try {

@@ -937,13 +937,10 @@ export function JobDetailView(props: DetailProps) {
                     <h2 className="font-headline-md text-headline-md text-on-surface">
                       Intake evidence &amp; telemetry
                     </h2>
-                    <Link
-                      className="font-label-md text-label-md text-primary hover:underline flex items-center gap-1"
-                      href="/activity"
-                    >
-                      View full audit trail ({props.auditCount} events)
-                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </Link>
+                    <span className="font-label-md text-label-md text-outline flex items-center gap-1">
+                      {props.auditCount} events logged to the audit trail
+                      <span className="material-symbols-outlined text-[16px]">verified</span>
+                    </span>
                   </div>
                   <div className="relative pl-6 flex flex-col gap-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container-highest">
                     {props.evidenceTimeline.map((event) => (

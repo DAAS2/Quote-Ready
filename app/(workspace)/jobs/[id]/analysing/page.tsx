@@ -20,13 +20,17 @@ export default async function AnalysingPage({
     .filter((e) => e.type === "photo_observation")
     .map((e) => e.claim);
 
+  const templateRow = job.template_id
+    ? await store.getTemplate(job.template_id).catch(() => null)
+    : null;
+
   return (
     <AnalysingView
       jobId={job.id}
       queueRef={`#${displayRef(job.id, "QR")}`}
       enquiryRef={displayRef(job.id, "ENQ")}
       customerName={job.customer.full_name}
-      jobTypeLabel={JOB_TYPE_LABELS[job.job_type]}
+      jobTypeLabel={templateRow?.name ?? JOB_TYPE_LABELS[job.job_type]}
       photoPaths={job.image_paths}
       photoClaims={photoClaims}
       urgencyLabel={titleCase(job.scope?.facts.urgency ?? "standard")}

@@ -42,6 +42,7 @@ export const quoteReadyGraph = builder.compile();
 export async function runQuoteReadyAnalysis(
   input: Pick<WorkflowStateType, "job_id" | "job_type" | "raw_text" | "customer_suburb" | "image_paths" | "existing_version"> & {
     new_image_paths?: string[];
+    template?: WorkflowStateType["template"];
   },
 ): Promise<WorkflowStateType> {
   const result = await quoteReadyGraph.invoke({

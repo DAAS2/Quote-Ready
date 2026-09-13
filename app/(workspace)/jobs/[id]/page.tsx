@@ -256,6 +256,12 @@ export default async function JobDetailPage({
     .filter((a) => a.event_type === "voice_note_applied")
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
+  // a job filed under a custom service template reports that name
+  const templateRow = job.template_id
+    ? await store.getTemplate(job.template_id).catch(() => null)
+    : null;
+  const jobTypeLabel = templateRow?.name ?? JOB_TYPE_LABELS[job.job_type];
+
   const delta =
     isV2 && prevVersion ? readiness - prevVersion.readiness_score : null;
 
@@ -273,7 +279,7 @@ export default async function JobDetailPage({
       suburbLine={`${suburbName}${postcode ? `, ${postcode}` : ""}`}
       createdLine={createdLine(job.created_at)}
       updatedLine={`Updated at ${clock(job.updated_at)} by Alex Miller`}
-      jobTypeLabel={JOB_TYPE_LABELS[job.job_type]}
+      jobTypeLabel={jobTypeLabel}
       statusPill={badge.pill}
       statusLabel={badge.label}
       statusIcon={badge.icon}

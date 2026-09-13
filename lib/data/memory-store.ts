@@ -3,6 +3,7 @@ import { DEMO_JOB_SEEDS } from "./demo-seed";
 import { buildSeedPack, SEED_AGE_HOURS } from "./seed";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
 import type {
+  AuditFeedRow,
   AuditInsert,
   AuditRow,
   CreateJobInput,
@@ -10,7 +11,9 @@ import type {
   EvidenceRow,
   JobDetail,
   JobListItem,
+  SaveTemplateInput,
   Store,
+  TemplateRow,
 } from "./types";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -37,10 +40,14 @@ interface MemJob {
   evidence: EvidenceRow[];
   audit: AuditRow[];
   drafts: DraftRow[];
+  template_id: string | null;
 }
 
-const g = globalThis as unknown as { __qr_mem?: Map<string, MemJob> };
+type MemTemplate = Omit<TemplateRow, "organisation_id">;
+
+const g = globalThis as unknown as { __qr_mem?: Map<string, MemJob>; __qr_templates?: Map<string, MemTemplate> };
 const jobs: Map<string, MemJob> = (g.__qr_mem ??= new Map());
+const templates: Map<string, MemTemplate> = (g.__qr_templates ??= new Map());
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -79,6 +86,7 @@ function ensureSeed(): void {
       image_paths: seed.image_paths,
       scope: pack,
       versions: [pack],
+      template_id: null,
       evidence,
       audit: [
         {
@@ -142,6 +150,7 @@ export class MemoryStore implements Store {
       audit_events: [...job.audit].sort((a, b) => b.created_at.localeCompare(a.created_at)),
       drafts: [...job.drafts].sort((a, b) => b.created_at.localeCompare(a.created_at)),
       image_paths: job.image_paths,
+      template_id: job.template_id,
     };
   }
 
@@ -165,6 +174,7 @@ export class MemoryStore implements Store {
       image_paths: input.image_paths,
       scope: null,
       versions: [],
+      template_id: input.template_id ?? null,
       evidence: [
         {
           id: crypto.randomUUID(),
@@ -295,6 +305,70 @@ export class MemoryStore implements Store {
   async listAudits(jobId: string): Promise<AuditRow[]> {
     const job = jobs.get(jobId);
     return job ? [...job.audit] : [];
+  }
+
+  async listRecentAuditFeed(limit: number): Promise<AuditFeedRow[]> {
+    ensureSeed();
+    const feed: AuditFeedRow[] = [];
+    for (const job of jobs.values()) {
+      for (const event of job.audit) {
+        feed.push({
+          ...event,
+          job_id: job.id,
+          job_name: job.customer.full_name,
+        });
+      }
+    }
+    return feed
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit);
+  }
+
+  async listTemplates(): Promise<TemplateRow[]> {
+    return [...templates.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getTemplate(id: string): Promise<TemplateRow | null> {
+    return templates.get(id) ?? null;
+  }
+
+  async saveTemplate(input: SaveTemplateInput): Promise<string> {
+    const now = nowIso();
+    if (input.id) {
+      const existing = templates.get(input.id);
+      if (existing) {
+        const updated: TemplateRow = {
+          ...existing,
+          base_type: input.base_type,
+          name: input.name,
+          blurb: input.blurb ?? null,
+          is_default: input.is_default,
+          document: input.document,
+          updated_at: now,
+        };
+        templates.set(updated.id, updated);
+        return updated.id;
+      }
+    }
+    const id = crypto.randomUUID();
+    templates.set(id, {
+      id,
+      base_type: input.base_type,
+      name: input.name,
+      blurb: input.blurb ?? null,
+      is_default: input.is_default,
+      document: input.document,
+      created_at: now,
+      updated_at: now,
+    });
+    return id;
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    templates.delete(id);
+    for (const job of jobs.values()) {
+      if (job.template_id === id) job.template_id = null;
+    }
   }
 
   async resetDemo(): Promise<void> {

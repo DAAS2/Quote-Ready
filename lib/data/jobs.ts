@@ -1,4 +1,5 @@
 import { getServerSupabase } from "@/lib/supabase/server";
+import { DEMO_ORG_ID, resolveOrgId } from "./org";
 import { memoryStore } from "./memory-store";
 import { SupabaseStore } from "./supabase-store";
 import { buildSeedPack } from "./seed";
@@ -6,11 +7,10 @@ import { DEMO_JOB_SEEDS } from "./demo-seed";
 import type { Store } from "./types";
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Data facade. Prefers Supabase; falls back to the in-memory demo store on
- * any failure so the product never hard-fails in front of a judge.
+ * Data facade. Prefers Supabase (scoped to the signed-in user's organisation,
+ * or the shared demo org when browsing anonymously); falls back to the
+ * in-memory demo store on any failure so the product never hard-fails.
  * ──────────────────────────────────────────────────────────────────────────── */
-
-const DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001";
 
 function primaryStore(): Store | null {
   const db = getServerSupabase();
@@ -29,8 +29,8 @@ async function withFallback<T>(op: (store: Store) => Promise<T>): Promise<T> {
   return op(memoryStore);
 }
 
-/** Ensure the demo org row exists (idempotent). */
-async function ensureOrg(): Promise<void> {
+/** Ensure the org row exists (idempotent) — only needed for the shared demo org. */
+async function ensureDemoOrg(): Promise<void> {
   const db = getServerSupabase();
   if (!db) return;
   const { error } = await db
@@ -42,18 +42,24 @@ async function ensureOrg(): Promise<void> {
   if (error) throw error;
 }
 
-/** Seed the three demo jobs (idempotent: only when the jobs table is empty). */
+/**
+ * Seed the demo jobs for the current organisation (idempotent: only when the
+ * org has no jobs). New sign-ups get the full 13-enquiry demo workspace.
+ */
 export async function ensureSeeded(): Promise<"supabase" | "memory" | "skipped"> {
   const db = getServerSupabase();
   if (db) {
     try {
-      await ensureOrg();
+      const orgId = await resolveOrgId(db);
+      if (orgId === DEMO_ORG_ID) await ensureDemoOrg();
+
       const { count, error } = await db
         .from("jobs")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("organisation_id", orgId);
       if (error) throw error;
       if ((count ?? 0) === 0) {
-        const store = new SupabaseStore(db);
+        const store = new SupabaseStore(db, orgId);
         for (const seed of DEMO_JOB_SEEDS) {
           const jobId = await store.createJob({
             customer: seed.customer,
@@ -120,6 +126,13 @@ export const store = {
   addAudit: (...args: Parameters<Store["addAudit"]>) =>
     withFallback((s) => s.addAudit(...args)),
   listAudits: (id: string) => withFallback((s) => s.listAudits(id)),
+  listRecentAuditFeed: (limit: number) =>
+    withFallback((s) => s.listRecentAuditFeed(limit)),
+  listTemplates: () => withFallback((s) => s.listTemplates()),
+  getTemplate: (id: string) => withFallback((s) => s.getTemplate(id)),
+  saveTemplate: (input: Parameters<Store["saveTemplate"]>[0]) =>
+    withFallback((s) => s.saveTemplate(input)),
+  deleteTemplate: (id: string) => withFallback((s) => s.deleteTemplate(id)),
   resetDemo: async () => {
     const primary = primaryStore();
     if (primary) {

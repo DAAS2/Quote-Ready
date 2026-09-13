@@ -74,7 +74,7 @@ export function Logo({
         className,
       )}
     >
-      <BrandLogoSvg tone={tone} />
+      <BrandLogoSvg tone={tone} wordmark={false} />
       <span className="font-headline-sm text-headline-sm tracking-tight">
         QuoteReady
       </span>

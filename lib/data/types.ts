@@ -8,12 +8,35 @@ import type {
   MessageType,
   ScopePack,
 } from "@/lib/ai/schemas";
+import type { JobTemplate } from "@/lib/rules/job-templates";
 
 export interface CustomerRecord {
   full_name: string;
   phone?: string | null;
   email?: string | null;
   suburb?: string | null;
+}
+
+/** A user-editable service template row. */
+export interface TemplateRow {
+  id: string;
+  organisation_id?: string;
+  base_type: JobType;
+  name: string;
+  blurb: string | null;
+  is_default: boolean;
+  document: JobTemplate;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaveTemplateInput {
+  id?: string;
+  base_type: JobType;
+  name: string;
+  blurb?: string | null;
+  is_default: boolean;
+  document: JobTemplate;
 }
 
 export interface EvidenceRow extends EvidenceItem {
@@ -69,6 +92,7 @@ export interface JobDetail extends JobListItem {
   audit_events: AuditRow[];
   drafts: DraftRow[];
   image_paths: string[];
+  template_id: string | null;
 }
 
 export interface CreateJobInput {
@@ -77,6 +101,8 @@ export interface CreateJobInput {
   enquiry_text: string;
   image_paths: string[];
   intake_channel?: IntakeChannel;
+  /** optional service template the enquiry is filed under */
+  template_id?: string | null;
 }
 
 export interface AuditInsert {
@@ -84,6 +110,11 @@ export interface AuditInsert {
   event_type: string;
   summary: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface AuditFeedRow extends AuditRow {
+  job_id: string;
+  job_name: string;
 }
 
 export interface Store {
@@ -108,5 +139,11 @@ export interface Store {
   updateDraftBody(jobId: string, draftId: string, body: string): Promise<void>;
   addAudit(jobId: string, event: AuditInsert): Promise<void>;
   listAudits(jobId: string): Promise<AuditRow[]>;
+  /** newest audit events across the whole workspace (for the alerts feed) */
+  listRecentAuditFeed(limit: number): Promise<AuditFeedRow[]>;
+  listTemplates(): Promise<TemplateRow[]>;
+  getTemplate(id: string): Promise<TemplateRow | null>;
+  saveTemplate(input: SaveTemplateInput): Promise<string>;
+  deleteTemplate(id: string): Promise<void>;
   resetDemo(): Promise<void>;
 }

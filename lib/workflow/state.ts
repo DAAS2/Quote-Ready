@@ -6,6 +6,7 @@ import type {
   JobType,
   ScopePack,
 } from "@/lib/ai/schemas";
+import type { JobTemplate } from "@/lib/rules/job-templates";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Workflow state shared across graph nodes.
@@ -19,6 +20,8 @@ export const WorkflowState = Annotation.Root({
   customer_suburb: Annotation<string | null>,
   image_paths: Annotation<string[]>,
   existing_version: Annotation<number>,
+  /** custom (user-edited) service template the job is graded against */
+  template: Annotation<JobTemplate | null>,
 
   /** extraction result (ai or fallback) */
   analysis: Annotation<GeminiAnalysis | null>({

@@ -37,16 +37,28 @@ export function AuthPanel({ mode }: { mode: "login" | "signup" }) {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
-        router.push("/dashboard");
+        // send first-time users through the setup wizard
+        try {
+          const res = await fetch("/api/profile");
+          const { profile } = await res.json();
+          router.push(profile?.onboarded_at ? "/dashboard" : "/onboarding");
+        } catch {
+          router.push("/dashboard");
+        }
       } else {
-        const { error } = await sb.auth.signUp({
+        const { data, error } = await sb.auth.signUp({
           email,
           password,
           options: { data: { full_name: name.trim() || null } },
         });
         if (error) throw error;
-        toast.success("Account created — welcome to QuoteReady!");
-        router.push("/dashboard");
+        if (!data.session) {
+          toast.success("Check your email to confirm your account, then sign in.");
+          router.push("/login");
+          return;
+        }
+        toast.success("Account created — let's set up your workspace.");
+        router.push("/onboarding");
       }
     } catch (err) {
       toast.error((err as Error).message.replace(/^Auth\s?ApiError:\s*/i, "") || "Something went wrong.");

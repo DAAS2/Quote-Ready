@@ -6,7 +6,8 @@ import type { VoiceUpdate } from "@/lib/ai/schemas";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * "Add a site note" modal — transcribed 1:1 from the record-site-note design.
- * Flow: record (timer + real capture) → transcript → AI/deterministic
+ * Flow: record (timer + real capture) → transcript (live browser speech-to-
+ * text, with automatic Gemini audio transcription as the fallback) →
  * extraction preview → user-approved apply (POST voice-note/apply).
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -15,6 +16,41 @@ interface ExtractedUpdates {
   isolation?: string;
   waterDamage?: string;
   recommendation?: { title: string; sub: string; tone: "amber" | "teal" };
+}
+
+/* Web Speech API typings (browser-specific, not in lib.dom everywhere) */
+interface SpeechResultAlternative {
+  transcript: string;
+}
+interface SpeechResult {
+  isFinal: boolean;
+  0: SpeechResultAlternative;
+  length: number;
+}
+interface SpeechEventLike {
+  resultIndex: number;
+  results: { length: number; [index: number]: SpeechResult };
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechEventLike) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognition(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
 const WAVEFORM_BARS = [
@@ -31,6 +67,75 @@ function fmt(seconds: number): string {
   return `${m}:${s}`;
 }
 
+/**
+ * Convert a MediaRecorder blob into 16 kHz mono PCM WAV with leading/trailing
+ * silence trimmed — far more reliable for speech-to-text than the raw webm
+ * (which some engines misread, returning empty transcripts).
+ */
+async function blobToWav(blob: Blob): Promise<Blob | null> {
+  try {
+    const AudioCtx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return null;
+    const ctx = new AudioCtx();
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const srcRate = decoded.sampleRate;
+    const rate = Math.min(srcRate, 16000);
+    const src = decoded.getChannelData(0);
+
+    // resample (linear)
+    const count = Math.floor((src.length * rate) / srcRate);
+    const samples = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const pos = (i * srcRate) / rate;
+      const idx = Math.floor(pos);
+      const frac = pos - idx;
+      samples[i] = (src[idx] ?? 0) * (1 - frac) + (src[idx + 1] ?? 0) * frac;
+    }
+
+    // trim silence (threshold on peak amplitude)
+    const threshold = 0.004;
+    let start = 0;
+    let end = samples.length;
+    while (start < end && Math.abs(samples[start]!) < threshold) start++;
+    while (end > start && Math.abs(samples[end - 1]!) < threshold) end--;
+    const trimmed = samples.slice(Math.max(0, start - Math.floor(rate * 0.15)), Math.min(samples.length, end + Math.floor(rate * 0.3)));
+    if (trimmed.length < rate * 0.3) {
+      void ctx.close();
+      return null; // effectively silent
+    }
+
+    // encode WAV (16-bit PCM)
+    const buffer = new ArrayBuffer(44 + trimmed.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (offset: number, s: string) => {
+      for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + trimmed.length * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, trimmed.length * 2, true);
+    for (let i = 0; i < trimmed.length; i++) {
+      const clamped = Math.max(-1, Math.min(1, trimmed[i]!));
+      view.setInt16(44 + i * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    }
+    void ctx.close();
+    return new Blob([buffer], { type: "audio/wav" });
+  } catch {
+    return null;
+  }
+}
+
 export function RecordSiteNoteModal({
   jobId,
   jobRef,
@@ -45,6 +150,7 @@ export function RecordSiteNoteModal({
   const [phase, setPhase] = useState<"idle" | "recording" | "captured">("idle");
   const [seconds, setSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [updates, setUpdates] = useState<ExtractedUpdates | null>(null);
   const [fieldsReady, setFieldsReady] = useState(0);
@@ -58,6 +164,8 @@ export function RecordSiteNoteModal({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechTextRef = useRef("");
 
   const stopTimer = () => {
     if (timerRef.current) {
@@ -123,17 +231,84 @@ export function RecordSiteNoteModal({
     return () => clearTimeout(handle);
   }, [transcript, runPreview]);
 
-  useEffect(() => () => {
-    stopTimer();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(
+    () => () => {
+      stopTimer();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* already ended */
+      }
+    },
+    [],
+  );
+
+  /** Automatic transcription of the recorded blob (server-side Scribe/Gemini). */
+  async function transcribeOnServer(rawBlob: Blob) {
+    setTranscribing(true);
+    try {
+      // prefer a cleaned 16 kHz WAV — raw MediaRecorder webm sometimes yields
+      // empty transcripts from the speech engines
+      const wav = await blobToWav(rawBlob);
+      const payload = wav ?? rawBlob;
+      const ext = wav ? "wav" : "webm";
+      const form = new FormData();
+      form.append("audio", payload, `site-note.${ext}`);
+      const res = await fetch(`/api/jobs/${jobId}/voice-note/transcribe`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Automatic transcription failed.");
+      setTranscript((data.transcript as string).trim());
+    } catch (error) {
+      toast.error((error as Error).message);
+      textareaRef.current?.focus();
+    } finally {
+      setTranscribing(false);
+    }
+  }
 
   function startRecording() {
     setPhase("recording");
     setSeconds(0);
+    speechTextRef.current = "";
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+
+    // live speech-to-text (Chromium browsers) — transcript fills as you speak
+    const SRCtor = getSpeechRecognition();
+    if (SRCtor) {
+      try {
+        const recognition = new SRCtor();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-AU";
+        recognition.onresult = (event) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i]!;
+            if (result.isFinal) {
+              speechTextRef.current = `${speechTextRef.current} ${result[0].transcript.trim()}`.trim();
+            } else {
+              interim += result[0].transcript;
+            }
+          }
+          setTranscript(
+            `${speechTextRef.current}${interim ? ` ${interim}` : ""}`.trimStart(),
+          );
+        };
+        recognition.onerror = () => {
+          /* permission denied or no-input — the recorded blob is the fallback */
+        };
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch {
+        recognitionRef.current = null;
+      }
+    }
+
+    // real audio capture (used for playback preview + server transcription)
     try {
       navigator.mediaDevices
         ?.getUserMedia({ audio: true })
@@ -141,11 +316,17 @@ export function RecordSiteNoteModal({
           streamRef.current = stream;
           chunksRef.current = [];
           const rec = new MediaRecorder(stream);
-          rec.ondataavailable = (e) => chunksRef.current.push(e.data);
+          rec.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+          };
           rec.onstop = () => {
-            const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+            const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
             if (audioUrl) URL.revokeObjectURL(audioUrl);
             setAudioUrl(URL.createObjectURL(blob));
+            // nothing captured by the browser speech engine? transcribe the audio
+            if (speechTextRef.current.trim().length < 10) {
+              void transcribeOnServer(blob);
+            }
           };
           rec.start();
           recorderRef.current = rec;
@@ -160,11 +341,16 @@ export function RecordSiteNoteModal({
 
   function stopRecording() {
     stopTimer();
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      /* already ended */
+    }
+    recognitionRef.current = null;
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setPhase("captured");
-    textareaRef.current?.focus();
   }
 
   function reRecord() {
@@ -172,6 +358,7 @@ export function RecordSiteNoteModal({
     setPhase("idle");
     setSeconds(0);
     setTranscript("");
+    speechTextRef.current = "";
     setUpdates(null);
     setUpdate(null);
     setFieldsReady(0);
@@ -218,6 +405,7 @@ export function RecordSiteNoteModal({
   }
 
   const captured = phase !== "idle";
+  const hasTranscript = transcript.trim().length >= 10;
 
   return (
     <div
@@ -271,9 +459,23 @@ export function RecordSiteNoteModal({
               <div className="flex items-center gap-2">
                 {captured ? (
                   <>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-                      <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
-                      <span>● {phase === "recording" ? "Recording" : "Audio captured"}</span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                        transcribing
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-red-50 text-red-700 border-red-200"
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${transcribing ? "bg-amber-500" : "bg-red-600 animate-ping"}`}
+                      ></span>
+                      <span>
+                        {transcribing
+                          ? "Transcribing audio…"
+                          : phase === "recording"
+                            ? "● Recording"
+                            : "Audio captured"}
+                      </span>
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {fmt(seconds)}
@@ -357,7 +559,9 @@ export function RecordSiteNoteModal({
             </div>
             <div className="mt-2 text-center text-xs text-slate-500 bg-slate-50 rounded-lg p-2.5 border border-slate-100">
               <span className="font-medium text-slate-700">Tradie tip:</span> Mention fixture type,
-              isolation access, dampness, and whether physical testing is needed.
+              isolation access, dampness, and whether physical testing is needed. Speech appears in
+              the transcript automatically — live while recording, or transcribed the moment you
+              press stop.
             </div>
           </section>
 
@@ -368,12 +572,18 @@ export function RecordSiteNoteModal({
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700" htmlFor="transcript-input">
                   Transcript
                 </label>
-                {update && (
+                {hasTranscript && !transcribing && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
                     </svg>
                     Transcribed
+                  </span>
+                )}
+                {transcribing && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    Transcribing…
                   </span>
                 )}
               </div>
@@ -387,7 +597,7 @@ export function RecordSiteNoteModal({
                 className="w-full text-xs sm:text-sm text-slate-800 leading-relaxed resize-none border-none p-0 focus:ring-0 focus:outline-none placeholder-slate-400"
                 id="transcript-input"
                 rows={3}
-                placeholder="Speak your note above, or type / paste the transcript here — e.g. “I inspected the tap. It is a corroded mixer. The isolation valve is accessible, but the cabinet base is damp.”"
+                placeholder="Speak your note above — the transcript appears here automatically. You can also type or paste it directly."
               />
               <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-[11px] text-slate-400">
                 <span className="flex items-center gap-1 text-teal-700 font-medium">
@@ -418,7 +628,7 @@ export function RecordSiteNoteModal({
                 </p>
               </div>
               <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">
-                {previewing ? "Reading note…" : `${fieldsReady} fields ready`}
+                {previewing || transcribing ? "Reading note…" : `${fieldsReady} fields ready`}
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

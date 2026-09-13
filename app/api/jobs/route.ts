@@ -18,6 +18,7 @@ const CreateJobForm = z.object({
   job_type: JobTypeEnum,
   intake_channel: z.enum(["text", "call", "web_form", "email", "in_person"]).default("text"),
   enquiry_text: z.string().trim().min(5).max(4000),
+  template_id: z.string().uuid().optional().or(z.literal("")),
 });
 
 export async function POST(request: Request) {
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       job_type: form.get("job_type"),
       intake_channel: form.get("intake_channel") || "text",
       enquiry_text: form.get("enquiry_text"),
+      template_id: form.get("template_id") || "",
     });
     if (!parsed.success) {
       return NextResponse.json(
@@ -69,6 +71,7 @@ export async function POST(request: Request) {
       enquiry_text: parsed.data.enquiry_text,
       image_paths: imagePaths,
       intake_channel: parsed.data.intake_channel,
+      ...(parsed.data.template_id ? { template_id: parsed.data.template_id } : {}),
     });
 
     return NextResponse.json({ id: jobId }, { status: 201 });

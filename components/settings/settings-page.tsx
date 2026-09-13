@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveBusinessProfile, loadBusinessProfile, type BusinessProfile } from "@/lib/auth/session";
+import { useSession } from "@/lib/auth/session";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Settings — restyled to the Calm Trade Precision design tokens (no dedicated
@@ -24,6 +25,8 @@ const TRADES = [
 
 export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }) {
   const router = useRouter();
+  const { user, signOut } = useSession();
+  const [signingOut, setSigningOut] = useState(false);
   const [profile, setProfile] = useState<BusinessProfile>(() => ({
     business_name: "",
     trade: TRADES[0],
@@ -38,6 +41,46 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
     setSaved(true);
     toast.success("Business profile saved.");
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function saveToAccount() {
+    saveBusinessProfile(profile);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business_name: profile.business_name.trim(),
+          trade: profile.trade,
+          service_area: profile.suburb.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.message(
+          data.error ?? "Saved on this device — account storage will sync once the database migration is applied.",
+        );
+        return;
+      }
+      setSaved(true);
+      toast.success("Profile saved to your account.");
+      router.refresh();
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      toast.message("Saved on this device — account storage unavailable.");
+    }
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out.");
+      router.push("/");
+      router.refresh();
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   async function resetDemo() {
@@ -154,6 +197,84 @@ export function SettingsPage({ storeKind }: { storeKind: "supabase" | "memory" }
             Save profile
           </button>
         </div>
+        {user && (
+          <div className="flex justify-end">
+            <button
+              className="font-label-md text-label-md text-primary hover:underline"
+              onClick={saveToAccount}
+              type="button"
+            >
+              Save to my account ({user.email})
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Account */}
+      <section className="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col gap-space-md">
+        <div className="flex items-center gap-2.5">
+          <span className="material-symbols-outlined text-primary-container text-[20px]">
+            account_circle
+          </span>
+          <h2 className="font-headline-md text-headline-md text-on-surface">Account</h2>
+        </div>
+        {user ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
+                <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-label-md text-label-md text-on-surface">
+                  {profile.business_name || "My workspace"}
+                </span>
+                <span className="font-body-sm text-body-sm text-on-surface-variant">
+                  Signed in as {user.email}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="h-10 px-4 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-lg text-label-lg transition-colors"
+                onClick={() => router.push("/onboarding")}
+                type="button"
+              >
+                Replay setup wizard
+              </button>
+              <button
+                className="h-10 px-4 rounded-lg bg-surface-container-lowest border border-border hover:bg-error-container/40 hover:text-error hover:border-error/30 text-on-surface font-label-lg text-label-lg transition-colors disabled:opacity-60"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                type="button"
+              >
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              You&apos;re browsing the shared demo workspace. Create an account to get your own
+              data, business profile and audit trail.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                className="h-10 px-4 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-lg text-label-lg transition-colors"
+                onClick={() => router.push("/login")}
+                type="button"
+              >
+                Sign in
+              </button>
+              <button
+                className="h-10 px-4 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary transition-colors"
+                onClick={() => router.push("/signup")}
+                type="button"
+              >
+                Create account
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Workspace & data */}

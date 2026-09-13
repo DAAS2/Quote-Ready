@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
 import { runQuoteReadyAnalysis } from "@/lib/workflow/quote-ready-graph";
+import { resolveJobTemplate } from "@/lib/rules/template-resolve";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,6 +17,10 @@ export async function POST(
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }
 
+    // grade against the organisation's template for this job (or the one the
+    // enquiry was filed under) — falling back to the built-in template
+    const template = await resolveJobTemplate(store, job).catch(() => undefined);
+
     const result = await runQuoteReadyAnalysis({
       job_id: id,
       job_type: job.job_type,
@@ -23,6 +28,7 @@ export async function POST(
       customer_suburb: job.customer.suburb ?? null,
       image_paths: job.image_paths,
       existing_version: (job.scope_version ?? 0) + (job.scope ? 1 : 0),
+      ...(template ? { template } : {}),
     });
 
     if (!result.scope) {

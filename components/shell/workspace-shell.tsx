@@ -5,67 +5,78 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogoSvg } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils/format";
+
+export interface AlertItem {
+  id: string;
+  job_id: string;
+  job_name: string;
+  actor_type: "user" | "ai" | "system";
+  event_type: string;
+  summary: string;
+  created_at: string;
+}
 
 interface ShellNavItem {
   href: string;
   label: string;
   icon: string;
-  badge?: number | string;
   match: (pathname: string) => boolean;
 }
 
 const NAV_ITEMS: ShellNavItem[] = [
-  {
-    href: "/dashboard",
-    label: "Overview",
-    icon: "grid_view",
-    match: (p) => p === "/dashboard",
-  },
-  {
-    href: "/jobs",
-    label: "Jobs",
-    icon: "plumbing",
-    match: (p) => p.startsWith("/jobs"),
-  },
-  {
-    href: "/messages",
-    label: "Messages",
-    icon: "chat_bubble",
-    match: (p) => p.startsWith("/messages"),
-  },
-  {
-    href: "/templates",
-    label: "Templates",
-    icon: "description",
-    match: (p) => p.startsWith("/templates"),
-  },
-  {
-    href: "/activity",
-    label: "Activity",
-    icon: "history",
-    match: (p) => p.startsWith("/activity"),
-  },
+  { href: "/dashboard", label: "Overview", icon: "grid_view", match: (p) => p === "/dashboard" },
+  { href: "/jobs", label: "Jobs", icon: "plumbing", match: (p) => p.startsWith("/jobs") },
+  { href: "/messages", label: "Messages", icon: "chat_bubble", match: (p) => p.startsWith("/messages") },
+  { href: "/templates", label: "Templates", icon: "description", match: (p) => p.startsWith("/templates") },
 ];
+
+const ALERT_ICONS: Record<string, { icon: string; tone: string }> = {
+  enquiry_received: { icon: "inbox", tone: "text-secondary" },
+  analysis_completed: { icon: "auto_awesome", tone: "text-primary" },
+  draft_created: { icon: "mark_email_unread", tone: "text-secondary" },
+  follow_up_approved: { icon: "mark_email_read", tone: "text-[#15803D]" },
+  voice_note_applied: { icon: "mic", tone: "text-primary" },
+  inspection_requested: { icon: "calendar_month", tone: "text-tertiary" },
+  scope_signed_off: { icon: "verified", tone: "text-[#15803D]" },
+  evidence_added: { icon: "photo_library", tone: "text-secondary" },
+};
 
 /**
  * Workspace shell — transcribed 1:1 from the triage dashboard design
- * (fixed navy sidebar + operations rail header).
+ * (fixed navy sidebar + operations rail header with live alerts popup).
  */
 export function WorkspaceShell({
   children,
   jobsCount,
   messagesCount,
+  alerts,
+  businessName,
+  operatorName,
 }: {
   children: React.ReactNode;
   jobsCount: number;
   messagesCount: number;
+  alerts: AlertItem[];
+  businessName: string;
+  operatorName: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [seenAt, setSeenAt] = useState<string>("");
+
+  useEffect(() => {
+    // read the persisted "seen" marker once on mount (client-only)
+    const timer = setTimeout(() => {
+      setSeenAt(window.localStorage.getItem("qr-alerts-seen-at") ?? "");
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,6 +88,22 @@ export function WorkspaceShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const unreadCount = seenAt
+    ? alerts.filter((a) => new Date(a.created_at).getTime() > new Date(seenAt).getTime()).length
+    : alerts.length;
+
+  function markAllRead() {
+    const now = new Date().toISOString();
+    window.localStorage.setItem("qr-alerts-seen-at", now);
+    setSeenAt(now);
+  }
+
+  function openAlert(alert: AlertItem) {
+    markAllRead();
+    setAlertsOpen(false);
+    router.push(`/jobs/${alert.job_id}`);
+  }
 
   async function resetDemo() {
     setResetOpen(false);
@@ -126,9 +153,7 @@ export function WorkspaceShell({
                   href={item.href}
                 >
                   <div className="flex items-center gap-space-sm">
-                    <span className="material-symbols-outlined text-[20px]">
-                      {item.icon}
-                    </span>
+                    <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                     <span className="font-label-lg text-label-lg">{item.label}</span>
                   </div>
                   {item.href === "/jobs" && jobsCount > 0 && (
@@ -150,8 +175,8 @@ export function WorkspaceShell({
           <div className="p-space-sm rounded-lg bg-tertiary/40 flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="font-label-md text-label-md text-inverse-on-surface">
-                  Northside Plumbing
+                <span className="font-label-md text-label-md text-inverse-on-surface truncate max-w-[150px]">
+                  {businessName}
                 </span>
                 <span className="font-body-sm text-body-sm text-tertiary-fixed-dim">
                   Melbourne, VIC
@@ -212,7 +237,7 @@ export function WorkspaceShell({
               </div>
               <div className="flex flex-col">
                 <span className="font-label-md text-label-md text-inverse-on-surface">
-                  Alex Miller
+                  {operatorName}
                 </span>
                 <span className="font-label-sm text-label-sm text-tertiary-fixed-dim">
                   Owner / Plumber
@@ -235,7 +260,7 @@ export function WorkspaceShell({
               className="lg:hidden flex items-center gap-1.5"
               aria-label="QuoteReady dashboard"
             >
-              <BrandLogoSvg tone="light" className="h-6 w-auto object-contain" />
+              <BrandLogoSvg tone="light" wordmark={false} className="h-6 w-auto object-contain" />
             </Link>
             <div className="hidden items-center gap-space-xs font-label-md text-label-md text-on-surface-variant lg:flex">
               <span className="material-symbols-outlined text-[18px]">home</span>
@@ -266,37 +291,109 @@ export function WorkspaceShell({
             </div>
           </div>
           <div className="flex items-center gap-space-md">
-            <div className="hidden xl:flex items-center gap-2 px-space-sm py-1.5 rounded-full bg-surface-container-low">
-              <span className="material-symbols-outlined text-secondary text-[16px]">
-                partly_cloudy_day
-              </span>
-              <span className="font-label-md text-label-md text-on-surface">
-                Melbourne 19°C
-              </span>
-              <span className="text-outline font-label-sm">•</span>
-              <span className="font-data-mono text-data-mono text-on-surface-variant">
-                2:15 PM
-              </span>
+            {/* Alerts */}
+            <div className="relative">
+              <button
+                className={cn(
+                  "relative p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors",
+                  alertsOpen && "bg-surface-container-low text-on-surface",
+                )}
+                onClick={() => setAlertsOpen((v) => !v)}
+                aria-label={`Alerts${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+                aria-expanded={alertsOpen}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[22px]">notifications</span>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary-container"></span>
+                )}
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error font-data-mono text-[9px] font-bold flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {alertsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setAlertsOpen(false)} aria-hidden />
+                  <div className="absolute right-0 top-12 w-96 max-w-[calc(100vw-2rem)] rounded-xl bg-surface-container-lowest shadow-[0_10px_15px_-3px_rgba(16,42,67,0.10),0_4px_6px_-4px_rgba(16,42,67,0.05)] border border-border z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-label-lg text-label-lg text-on-surface">Alerts</span>
+                        {unreadCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-error-container/60 text-on-error-container font-label-sm text-label-sm">
+                            {unreadCount} new
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        className="font-label-sm text-label-sm text-primary hover:underline disabled:opacity-50"
+                        onClick={markAllRead}
+                        disabled={unreadCount === 0}
+                        type="button"
+                      >
+                        Mark all read
+                      </button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto custom-scroll">
+                      {alerts.length === 0 && (
+                        <p className="px-4 py-8 text-center font-body-sm text-body-sm text-on-surface-variant">
+                          No activity yet — actions you take will appear here.
+                        </p>
+                      )}
+                      {alerts.map((alert) => {
+                        const meta = ALERT_ICONS[alert.event_type] ?? {
+                          icon: "notifications",
+                          tone: "text-outline",
+                        };
+                        const unread = !seenAt || new Date(alert.created_at) > new Date(seenAt);
+                        return (
+                          <button
+                            key={alert.id}
+                            className={cn(
+                              "w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-surface-container-low transition-colors border-b border-border/60 last:border-b-0",
+                              unread && "bg-surface-container-low/50",
+                            )}
+                            onClick={() => openAlert(alert)}
+                            type="button"
+                          >
+                            <span
+                              className={cn(
+                                "w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0",
+                                meta.tone,
+                              )}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">
+                                {meta.icon}
+                              </span>
+                            </span>
+                            <span className="flex flex-col min-w-0 flex-1">
+                              <span className="font-label-md text-label-md text-on-surface truncate">
+                                {alert.job_name}
+                              </span>
+                              <span className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">
+                                {alert.summary}
+                              </span>
+                              <span className="font-data-mono text-label-sm text-outline mt-0.5">
+                                {relativeTime(alert.created_at)} · {alert.actor_type} action
+                              </span>
+                            </span>
+                            {unread && (
+                              <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0"></span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="px-4 py-3 border-t border-border text-center">
+                      <span className="font-label-sm text-label-sm text-on-surface-variant">
+                        The last {alerts.length} workspace events · all actions stay under your review
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-            <Link
-              href="/messages"
-              className="relative p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors"
-              aria-label="Messages"
-            >
-              <span className="material-symbols-outlined text-[22px]">
-                notifications
-              </span>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary-container"></span>
-            </Link>
-            <Link
-              href="/settings"
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center"
-              aria-label="Account settings"
-            >
-              <span className="material-symbols-outlined text-on-primary text-[18px]">
-                person
-              </span>
-            </Link>
           </div>
         </header>
         <main className="w-full flex-1 pt-16 bg-surface min-h-dvh">

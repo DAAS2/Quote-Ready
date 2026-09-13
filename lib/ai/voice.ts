@@ -4,6 +4,7 @@ import { buildScopePack } from "@/lib/rules/engine";
 import type { JobDetail } from "@/lib/data/types";
 import type { JobFacts, ScopePack, VoiceUpdate } from "@/lib/ai/schemas";
 import { EMPTY_FACTS } from "@/lib/ai/schemas";
+import type { JobTemplate } from "@/lib/rules/job-templates";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Voice-note → scope update. Preview first (nothing persisted), then a
@@ -20,6 +21,7 @@ export function buildVoicePreview(
   job: JobDetail,
   transcript: string,
   update: VoiceUpdate,
+  template?: JobTemplate,
 ): VoicePreview {
   const current = job.scope;
   const currentVersion = job.scope_version ?? 0;
@@ -55,6 +57,7 @@ export function buildVoicePreview(
     recommended_questions: [],
     version: Math.max(1, nextVersion),
     produced_by: "voice_update",
+    ...(template ? { template } : {}),
   });
 
   return {

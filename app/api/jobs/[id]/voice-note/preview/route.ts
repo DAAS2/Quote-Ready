@@ -4,6 +4,7 @@ import { buildVoicePreview } from "@/lib/ai/voice";
 import { deterministicVoiceUpdate } from "@/lib/ai/voice";
 import { extractVoiceUpdate, GEMINI_CONFIGURED } from "@/lib/ai/gemini";
 import { VoiceUpdateSchema } from "@/lib/ai/schemas";
+import { resolveJobTemplate } from "@/lib/rules/template-resolve";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -54,7 +55,8 @@ export async function POST(
       );
     }
 
-    const preview = buildVoicePreview(job, transcript, validated.data);
+    const template = await resolveJobTemplate(store, job).catch(() => undefined);
+    const preview = buildVoicePreview(job, transcript, validated.data, template);
 
     return NextResponse.json({
       ok: true,

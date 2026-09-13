@@ -1,6 +1,8 @@
 import type { JobFacts, JobStatus, ScopePack } from "@/lib/ai/schemas";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { DEMO_ORG_ID, resolveOrgId } from "./org";
 import type {
+  AuditFeedRow,
   AuditInsert,
   AuditRow,
   CreateJobInput,
@@ -8,27 +10,43 @@ import type {
   EvidenceRow,
   JobDetail,
   JobListItem,
+  SaveTemplateInput,
   Store,
+  TemplateRow,
 } from "./types";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Supabase store. Every method degrades gracefully: the facade falls back
  * to the memory store if the client is unavailable or a call fails.
+ * All rows are scoped to the signed-in user's organisation (demo org when
+ * browsing anonymously).
  * ──────────────────────────────────────────────────────────────────────────── */
-
-const DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001";
 
 type Client = NonNullable<ReturnType<typeof getServerSupabase>>;
 
 export class SupabaseStore implements Store {
   readonly kind = "supabase" as const;
-  constructor(private db: Client) {}
+  private orgCache: string | null;
+
+  constructor(
+    private db: Client,
+    orgId?: string | null,
+  ) {
+    this.orgCache = orgId ?? null;
+  }
+
+  /** Resolve (and cache) the organisation for this request. */
+  private async org(): Promise<string> {
+    if (this.orgCache) return this.orgCache;
+    this.orgCache = await resolveOrgId(this.db).catch(() => DEMO_ORG_ID);
+    return this.orgCache;
+  }
 
   private async customerId(customer: CreateJobInput["customer"]): Promise<string> {
     const { data, error } = await this.db
       .from("customers")
       .insert({
-        organisation_id: DEMO_ORG_ID,
+        organisation_id: await this.org(),
         full_name: customer.full_name,
         phone: customer.phone ?? null,
         email: customer.email ?? null,
@@ -45,13 +63,14 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.db
       .from("jobs")
       .insert({
-        organisation_id: DEMO_ORG_ID,
+        organisation_id: await this.org(),
         customer_id: customerId,
         job_type: input.job_type,
         status: "new",
         intake_channel: input.intake_channel ?? "text",
         enquiry_text: input.enquiry_text,
         extracted_facts: {},
+        ...(input.template_id ? { template_id: input.template_id } : {}),
       })
       .select("id")
       .single();
@@ -85,6 +104,7 @@ export class SupabaseStore implements Store {
         `id, job_type, intake_channel, status, readiness_score, safety_flag, created_at, updated_at, enquiry_text, extracted_facts,
          customers!inner (full_name, phone, suburb)`,
       )
+      .eq("organisation_id", await this.org())
       .order("updated_at", { ascending: false });
     if (error) throw error;
     return data.map((row) => {
@@ -123,6 +143,7 @@ export class SupabaseStore implements Store {
         `*, customers!inner (full_name, phone, email, suburb)`,
       )
       .eq("id", id)
+      .eq("organisation_id", await this.org())
       .single();
     if (error || !data) return null;
     const c = Array.isArray(data.customers) ? data.customers[0] : data.customers;
@@ -177,6 +198,7 @@ export class SupabaseStore implements Store {
       evidence: (evidence.data ?? []).map(toEvidenceRow),
       audit_events: (audits.data ?? []).map(toAuditRow),
       drafts: (drafts.data ?? []).map(toDraftRow),
+      template_id: data.template_id ?? null,
       image_paths: (evidence.data ?? [])
         .filter((e) => e.evidence_type === "image" && e.storage_path)
         .map((e) => e.storage_path as string),
@@ -324,13 +346,113 @@ export class SupabaseStore implements Store {
     return data.map(toAuditRow);
   }
 
+  async listRecentAuditFeed(limit: number): Promise<AuditFeedRow[]> {
+    const { data, error } = await this.db
+      .from("audit_events")
+      .select(
+        `id, actor_type, event_type, summary, metadata, created_at,
+         jobs!inner (id, organisation_id, customers (full_name))`,
+      )
+      .eq("jobs.organisation_id", await this.org())
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data as unknown as Array<{
+      id: string;
+      actor_type: string;
+      event_type: string;
+      summary: string;
+      metadata: Record<string, unknown>;
+      created_at: string;
+      jobs: { id: string; customers: { full_name: string } | { full_name: string }[] };
+    }>).map((row) => {
+      const customer = Array.isArray(row.jobs.customers)
+        ? row.jobs.customers[0]
+        : row.jobs.customers;
+      return { ...toAuditRow(row), job_id: row.jobs.id, job_name: customer?.full_name ?? "Job" };
+    });
+  }
+
+  async listTemplates(): Promise<TemplateRow[]> {
+    const { data, error } = await this.db
+      .from("job_templates")
+      .select("*")
+      .eq("organisation_id", await this.org())
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(toTemplateRow);
+  }
+
+  async getTemplate(id: string): Promise<TemplateRow | null> {
+    const { data, error } = await this.db
+      .from("job_templates")
+      .select("*")
+      .eq("id", id)
+      .eq("organisation_id", await this.org())
+      .maybeSingle();
+    if (error || !data) return null;
+    return toTemplateRow(data);
+  }
+
+  async saveTemplate(input: SaveTemplateInput): Promise<string> {
+    const org = await this.org();
+    const row = {
+      organisation_id: org,
+      base_type: input.base_type,
+      name: input.name,
+      blurb: input.blurb ?? null,
+      is_default: input.is_default,
+      document: input.document,
+    };
+    if (input.id) {
+      const { data, error } = await this.db
+        .from("job_templates")
+        .update(row)
+        .eq("id", input.id)
+        .eq("organisation_id", org)
+        .select("id")
+        .single();
+      if (error || !data) throw error ?? new Error("Template not found.");
+      await this.clearOtherDefaults(org, input.base_type, data.id, input.is_default);
+      return data.id;
+    }
+    const { data, error } = await this.db
+      .from("job_templates")
+      .insert(row)
+      .select("id")
+      .single();
+    if (error || !data) throw error ?? new Error("Could not save the template.");
+    await this.clearOtherDefaults(org, input.base_type, data.id, input.is_default);
+    return data.id;
+  }
+
+  private async clearOtherDefaults(
+    org: string,
+    baseType: string,
+    keepId: string,
+    isDefault: boolean,
+  ): Promise<void> {
+    if (!isDefault) return;
+    await this.db
+      .from("job_templates")
+      .update({ is_default: false })
+      .eq("organisation_id", org)
+      .eq("base_type", baseType)
+      .neq("id", keepId);
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    await this.db
+      .from("job_templates")
+      .delete()
+      .eq("id", id)
+      .eq("organisation_id", await this.org());
+  }
+
   async resetDemo(): Promise<void> {
-    await this.db.from("audit_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await this.db.from("message_drafts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await this.db.from("scope_versions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await this.db.from("job_evidence").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await this.db.from("jobs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await this.db.from("customers").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    const org = await this.org();
+    await this.db.from("jobs").delete().eq("organisation_id", org);
+    await this.db.from("customers").delete().eq("organisation_id", org);
   }
 }
 
@@ -401,6 +523,30 @@ function toAuditRow(row: {
     summary: row.summary,
     metadata: row.metadata ?? {},
     created_at: row.created_at,
+  };
+}
+
+function toTemplateRow(row: {
+  id: string;
+  organisation_id: string;
+  base_type: string;
+  name: string;
+  blurb: string | null;
+  is_default: boolean;
+  document: TemplateRow["document"];
+  created_at: string;
+  updated_at: string;
+}): TemplateRow {
+  return {
+    id: row.id,
+    organisation_id: row.organisation_id,
+    base_type: row.base_type as TemplateRow["base_type"],
+    name: row.name,
+    blurb: row.blurb,
+    is_default: row.is_default,
+    document: row.document,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
