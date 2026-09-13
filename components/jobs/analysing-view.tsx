@@ -41,61 +41,64 @@ export function AnalysingView({
   urgencyLabel: string;
 }) {
   const router = useRouter();
-  const [scanProgress, setScanProgress] = useState(58);
-  const [photoProgress, setPhotoProgress] = useState(20);
-  const [stage, setStage] = useState<0 | 1 | 2 | 3>(1);
-  const [eta, setEta] = useState("~8 seconds");
-  const startedRef = useRef(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [resolved, setResolved] = useState(false);
   const finishedRef = useRef(false);
+  /**
+   * The analysis request is cached per job and shared across effect runs.
+   * React StrictMode mounts effects twice in development; without this the
+   * first run would be cancelled (so the redirect never fired) while the
+   * second run bailed on the `startedRef` guard — leaving the screen frozen.
+   */
+  const requestRef = useRef<Promise<{ used_fallback?: boolean }> | null>(null);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // staged progress animation
-    const ticker = setInterval(() => {
-      setScanProgress((p) => (p < 92 ? p + Math.floor(Math.random() * 4) + 1 : p));
-      setPhotoProgress((p) => (p < 96 ? p + Math.floor(Math.random() * 6) + 2 : p));
-    }, 1200);
-    timers.push(ticker as unknown as ReturnType<typeof setTimeout>);
-    timers.push(
-      setTimeout(() => setEta("~5 seconds"), 2500) as unknown as ReturnType<typeof setTimeout>,
-    );
-    timers.push(
-      setTimeout(() => setEta("~2 seconds"), 4500) as unknown as ReturnType<typeof setTimeout>,
-    );
+    const ticker = setInterval(() => setElapsed((e) => e + 1), 1000);
 
-    // run the real analysis
+    if (!requestRef.current) {
+      requestRef.current = fetch(`/api/jobs/${jobId}/analyse`, { method: "POST" }).then(
+        async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error ?? "Analysis failed.");
+          return data as { used_fallback?: boolean };
+        },
+      );
+    }
+    const request = requestRef.current;
+
     void (async () => {
       const startedAt = Date.now();
       try {
-        const res = await fetch(`/api/jobs/${jobId}/analyse`, { method: "POST" });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? "Analysis failed.");
+        const data = await request;
         if (cancelled) return;
-        const elapsed = Date.now() - startedAt;
-        const wait = Math.max(0, 3200 - elapsed);
+        // hold for a beat so the staged categories are readable, then move on
+        const wait = Math.max(0, 3200 - (Date.now() - startedAt));
         timers.push(
           setTimeout(() => {
             if (cancelled || finishedRef.current) return;
             finishedRef.current = true;
-            clearInterval(ticker);
-            setStage(3);
-            setScanProgress(100);
-            setPhotoProgress(100);
+            setResolved(true);
             if (data.used_fallback) {
               toast.message("Analysis completed with the offline rule engine.");
             }
-            setTimeout(() => router.replace(`/jobs/${jobId}`), 700);
-          }, wait) as unknown as ReturnType<typeof setTimeout>,
+            timers.push(
+              setTimeout(() => {
+                if (!cancelled) router.replace(`/jobs/${jobId}`);
+              }, 900),
+            );
+          }, wait),
         );
       } catch (error) {
         if (cancelled) return;
-        clearInterval(ticker);
         toast.error((error as Error).message);
-        setTimeout(() => router.replace(`/jobs/${jobId}`), 900);
+        timers.push(
+          setTimeout(() => {
+            if (!cancelled) router.replace(`/jobs/${jobId}`);
+          }, 900),
+        );
       }
     })();
 
@@ -112,6 +115,14 @@ export function AnalysingView({
   }
 
   const photos = photoPaths.slice(0, 2);
+  // Staged progression: photos → scope details → recommendation. Each stage
+  // completes on a timer (or immediately once the analysis returns), so the
+  // screen always walks through the categories and then opens the job.
+  const photosDone = photoPaths.length === 0 || elapsed >= 6 || resolved;
+  const detailsDone = elapsed >= 12 || resolved;
+  const stage: 0 | 1 | 2 | 3 = resolved ? 3 : detailsDone ? 2 : 1;
+  const scanProgress = resolved ? 100 : Math.min(94, 12 + elapsed * 4);
+  const photoProgress = photosDone ? 100 : Math.min(90, 8 + elapsed * 6);
 
   return (
     <div className="flex flex-col w-full">
@@ -122,7 +133,7 @@ export function AnalysingView({
             className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1"
             href="/jobs"
           >
-            <span className="material-symbols-outlined text-[16px]">plumbing</span>
+            <span className="material-symbols-outlined text-[16px]">handyman</span>
             <span>Jobs</span>
           </Link>
           <span className="text-outline-variant font-label-sm">/</span>
@@ -136,7 +147,7 @@ export function AnalysingView({
         </div>
         <div className="flex items-center gap-2 text-on-surface-variant font-data-mono text-label-sm">
           <span className="inline-block w-2 h-2 rounded-full bg-primary animate-ping"></span>
-          <span>Melbourne Queue · ID {queueRef}</span>
+          <span>Analysis queue · ID {queueRef}</span>
         </div>
       </div>
       {/* Stepper Component */}
@@ -220,7 +231,11 @@ export function AnalysingView({
                 </span>
               </div>
               <span className="font-data-mono text-label-sm text-on-surface-variant bg-surface-container-low px-2.5 py-1 rounded">
-                {stage >= 3 ? "Opening review…" : `ETA ${eta}`}
+                {stage >= 3
+                  ? "Opening review…"
+                  : elapsed > 30
+                    ? `Still working — ${elapsed}s elapsed`
+                    : `ETA ~${Math.max(2, 24 - elapsed)}s`}
               </span>
             </div>
             <div className="flex items-start gap-space-md pt-2">
@@ -290,19 +305,24 @@ export function AnalysingView({
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
-                  Extracted contact details, customer address in{" "}
-                  <span className="text-on-surface font-semibold">Melbourne, VIC</span>, and
-                  requested urgency timeline ({urgencyLabel}).
+                  Extracted contact details, the customer&apos;s service suburb, and the requested
+                  urgency timeline ({urgencyLabel}).
                 </p>
               </div>
             </div>
             {/* Step 2: Attached Photos (Active with Photo Previews) */}
             <div className="flex items-start gap-space-md p-space-md rounded-xl bg-surface-container-low transition-all">
-              <div className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm ${
+                  stage >= 3 || photosDone
+                    ? "bg-surface-container text-primary"
+                    : "bg-primary text-on-primary"
+                }`}
+              >
                 <span
-                  className={`material-symbols-outlined text-[20px] ${stage >= 3 ? "" : "animate-spin"}`}
+                  className={`material-symbols-outlined text-[20px] ${stage >= 3 || photosDone ? "" : "animate-spin"}`}
                 >
-                  {stage >= 3 ? "check" : "progress_activity"}
+                  {stage >= 3 || photosDone ? "check" : "progress_activity"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -312,24 +332,36 @@ export function AnalysingView({
                       Reviewing attached photos
                     </span>
                     <span className="text-primary font-data-mono text-label-sm font-semibold">
-                      {photoPaths.length === 0 ? "No photos" : `${photoProgress}%`}
+                    {photoPaths.length === 0
+                      ? "No photos"
+                      : photosDone
+                        ? "Verified"
+                        : `${Math.round(photoProgress)}%`}
                     </span>
                   </div>
                   <span className="font-label-sm text-label-sm text-primary font-medium">
-                    {photoPaths.length === 0 ? "Text-only analysis" : "Vision parsing active"}
+                    {photoPaths.length === 0
+                      ? "Text-only analysis"
+                      : photosDone
+                        ? "Photos processed"
+                        : "Vision parsing active"}
                   </span>
                 </div>
                 {/* Mini Progress Bar */}
                 <div className="w-full h-1.5 bg-surface-container rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-primary rounded-full transition-all duration-500"
-                    style={{ width: `${photoPaths.length === 0 ? 100 : photoProgress}%` }}
+                    style={{
+                      width: `${photoPaths.length === 0 ? 100 : photosDone ? 100 : photoProgress}%`,
+                    }}
                   ></div>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-2">
                   {photoPaths.length === 0
                     ? "No photos were attached — analysis continues from the written enquiry details..."
-                    : `Detecting fixture model, basin spout drip rate, and under-sink isolation valve visibility across ${photoPaths.length} file${photoPaths.length === 1 ? "" : "s"}...`}
+                    : photosDone
+                      ? `Reviewed ${photoPaths.length} attached file${photoPaths.length === 1 ? "" : "s"} — finishing the scope assessment…`
+                      : `Detecting the fixture, visible access and isolation points across ${photoPaths.length} file${photoPaths.length === 1 ? "" : "s"}...`}
                 </p>
                 {/* Embedded Image Evidence Cards */}
                 {photos.length > 0 && (
@@ -385,18 +417,18 @@ export function AnalysingView({
             {/* Step 3: Required Scope Details */}
             <div
               className={`flex items-start gap-space-md p-space-sm rounded-lg transition-colors ${
-                stage >= 3 ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-75"
+                detailsDone ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-75"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  stage >= 3
+                  detailsDone
                     ? "bg-surface-container text-primary"
                     : "bg-surface-container-high text-outline"
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">
-                  {stage >= 3 ? "check_circle" : "radio_button_unchecked"}
+                  {detailsDone ? "check_circle" : "radio_button_unchecked"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -405,7 +437,7 @@ export function AnalysingView({
                     Checking required scope details
                   </span>
                   <span className="font-label-sm text-label-sm font-data-mono text-primary">
-                    {stage >= 3 ? "Processed" : "Queued"}
+                    {detailsDone ? "Processed" : "Queued"}
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
@@ -417,18 +449,18 @@ export function AnalysingView({
             {/* Step 4: Next-step Recommendation */}
             <div
               className={`flex items-start gap-space-md p-space-sm rounded-lg transition-colors ${
-                stage >= 3 ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-60"
+                resolved ? "bg-surface-container-lowest" : "bg-surface-container-lowest opacity-60"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  stage >= 3
+                  resolved
                     ? "bg-surface-container text-primary"
                     : "bg-surface-container-high text-outline"
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">
-                  {stage >= 3 ? "check_circle" : "hourglass_empty"}
+                  {resolved ? "check_circle" : "hourglass_empty"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -437,7 +469,7 @@ export function AnalysingView({
                     Preparing next-step recommendation
                   </span>
                   <span className="font-label-sm text-label-sm font-data-mono text-primary">
-                    {stage >= 3 ? "Processed" : "Pending"}
+                    {resolved ? "Processed" : "Pending"}
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
@@ -451,7 +483,7 @@ export function AnalysingView({
           <div className="mt-space-lg pt-space-md bg-surface-container-low/40 rounded-lg p-space-sm flex flex-col sm:flex-row items-center justify-between gap-space-sm">
             <div className="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
               <span className="material-symbols-outlined text-[18px] text-primary">lock_clock</span>
-              <span>Analysing locally based on Northside Plumbing standard rate cards</span>
+              <span>Analysing against your own standard rate cards — no prices are generated</span>
             </div>
             <button
               className="w-full sm:w-auto px-space-md py-2 rounded-lg bg-surface-container-lowest text-on-surface-variant hover:text-error hover:bg-error-container/40 font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 shadow-sm"
@@ -476,8 +508,8 @@ export function AnalysingView({
               </span>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant pb-space-md">
-              QuoteReady structures raw homeowner inquiries into standard Melbourne plumbing job
-              scopes before quotes are prepared.
+              QuoteReady structures raw customer enquiries into standard trade job scopes before
+              quotes are prepared.
             </p>
             {/* Bulleted Guidance List */}
             <div className="flex flex-col gap-space-md">
@@ -534,7 +566,7 @@ export function AnalysingView({
                     You review &amp; approve every action
                   </span>
                   <span className="font-body-sm text-body-sm text-on-surface-variant pt-0.5">
-                    Alex retains 100% control over hourly rates, parts margin markup, and all client
+                    You retain 100% control over hourly rates, parts margin markup, and all client
                     messages.
                   </span>
                 </div>
@@ -544,22 +576,24 @@ export function AnalysingView({
             <div className="mt-space-md pt-space-md bg-surface-container-low rounded-lg p-space-sm flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-on-surface-variant font-label-sm text-label-sm">
-                  Standard Labor Rate
+                  Pricing
                 </span>
                 <span className="font-data-mono font-bold text-on-surface text-label-lg">
-                  $110.00 / hr
+                  Your rate card
                 </span>
               </div>
               <div className="h-8 w-px bg-surface-container-high"></div>
               <div className="flex flex-col">
                 <span className="text-on-surface-variant font-label-sm text-label-sm">
-                  Parts Margin Applied
+                  Rates &amp; margins
                 </span>
-                <span className="font-data-mono font-bold text-primary text-label-lg">+22.5%</span>
+                <span className="font-data-mono font-bold text-primary text-label-lg">
+                  Stay under your review
+                </span>
               </div>
             </div>
           </div>
-          {/* Plumber Trust & Safety Shield Card */}
+          {/* Tradie trust & safety shield card */}
           <div className="bg-surface-container-high rounded-xl p-space-md shadow-sm relative overflow-hidden">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -567,16 +601,16 @@ export function AnalysingView({
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                  Plumber Oversight Guarantee
+                  Tradie Oversight Guarantee
                 </span>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-1 leading-snug">
                   QuoteReady never auto-sends quotes or texts customers without your explicit
-                  sign-off. Every material estimate remains completely under Alex&apos;s manual review.
+                  sign-off. Every material estimate remains completely under your manual review.
                 </p>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-on-surface-variant font-data-mono text-[11px] pt-2">
-              <span>Northside Plumbing Rulebook v2.4</span>
+              <span>Your workspace rulebook</span>
               <span className="flex items-center gap-1 text-primary">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                 Strict Manual Dispatch

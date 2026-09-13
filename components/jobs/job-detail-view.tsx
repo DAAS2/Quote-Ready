@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import { FollowUpModal } from "@/components/jobs/follow-up-modal";
+import { AddEvidencePanel } from "@/components/jobs/add-evidence-panel";
 import type { DraftRow } from "@/lib/data/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ interface DetailProps {
   refJob: string;
   refQr: string;
   title: string;
+  operatorName: string;
   customerName: string;
   customerInitials: string;
   phone: string;
@@ -52,6 +54,8 @@ interface DetailProps {
     reasons: string[];
   };
   assumptions: string[];
+  exclusions: string[];
+  inspectionTriggers: string[];
   nextActions: Array<{ key: string; label: string }>;
   versions: Array<{
     version: number;
@@ -106,6 +110,25 @@ export function JobDetailView(props: DetailProps) {
   }
 
   const isV2 = (props.scopeVersion ?? 1) >= 2 && props.versions.length >= 2;
+
+  async function deleteEnquiry() {
+    const confirmed = window.confirm(
+      "Delete this enquiry? Its photos, voice notes, scope versions and drafts are removed permanently.",
+    );
+    if (!confirmed) return;
+    setBusy("delete");
+    try {
+      const res = await fetch(`/api/jobs/${props.jobId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not delete the enquiry.");
+      toast.success("Enquiry deleted.");
+      router.push("/jobs");
+      router.refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+      setBusy(null);
+    }
+  }
 
   async function approveScope() {
     setBusy("approve");
@@ -251,7 +274,10 @@ export function JobDetailView(props: DetailProps) {
             </div>
             {/* Readiness Widget & Actions */}
             <div className="flex items-center gap-space-md flex-wrap shrink-0">
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-surface-container-lowest shadow-sm">
+              <div
+                data-tour="scope-readiness"
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-surface-container-lowest shadow-sm"
+              >
                 <div className="relative w-11 h-11 flex items-center justify-center shrink-0">
                   <svg className="w-11 h-11 -rotate-90" viewBox="0 0 36 36">
                     <path
@@ -310,6 +336,7 @@ export function JobDetailView(props: DetailProps) {
               {/* Quick Primary/Secondary CTAs */}
               <div className="flex items-center gap-2">
                 <button
+                  data-tour="record-site-note"
                   className="h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors flex items-center gap-2"
                   onClick={() => setModal("note")}
                   type="button"
@@ -376,7 +403,10 @@ export function JobDetailView(props: DetailProps) {
           {/* Right Side: Readiness Radial/Metric + Quick Actions */}
           <div className="flex flex-wrap items-center gap-space-lg">
             {/* Quote Readiness Visual Metric */}
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-surface-container-low">
+            <div
+              data-tour="scope-readiness"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-surface-container-low"
+            >
               <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
                 <svg className="w-12 h-12 -rotate-90" viewBox="0 0 44 44">
                   <circle
@@ -421,6 +451,7 @@ export function JobDetailView(props: DetailProps) {
             {/* Action Button Group */}
             <div className="flex items-center gap-2">
               <button
+                data-tour="record-site-note"
                 className="h-10 px-4 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-lg text-label-lg flex items-center gap-2 shadow-sm transition-colors"
                 onClick={() => setModal("note")}
                 type="button"
@@ -448,7 +479,10 @@ export function JobDetailView(props: DetailProps) {
           {isV2 ? (
             <>
               {/* v2 Card 1: Latest Evidence Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-required"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-center justify-between border-b-0 pb-1">
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded bg-primary-fixed text-on-primary-fixed flex items-center justify-center">
@@ -477,7 +511,7 @@ export function JobDetailView(props: DetailProps) {
                       <div className="flex items-center gap-2 font-data-mono text-label-sm text-on-surface-variant">
                         <span>{props.voiceEvidence.time}</span>
                         <span>•</span>
-                        <span className="text-on-surface font-medium">Alex Miller (On-site)</span>
+                        <span className="text-on-surface font-medium">{props.operatorName} (On-site)</span>
                       </div>
                     </div>
                     {/* Waveform Visualizer & Playback Mock */}
@@ -775,8 +809,8 @@ export function JobDetailView(props: DetailProps) {
                 <div className="pt-space-sm flex items-center gap-2 text-outline font-data-mono text-label-sm">
                   <span className="material-symbols-outlined text-[16px]">verified</span>
                   <span>
-                    Scope changes signed off by Alex Miller (Lic. #48291). All revisions logged to
-                    job ledger.
+                    Scope changes signed off by {props.operatorName}. All revisions logged to job
+                    ledger.
                   </span>
                 </div>
               </section>
@@ -878,12 +912,15 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: What we know */}
               {props.knownFacts.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-required"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#15803D]"></span>
                       <h2 className="font-headline-md text-headline-md text-on-surface">
-                        What we know
+                        Required details
                       </h2>
                     </div>
                     <span className="font-data-mono text-label-sm text-on-surface-variant">
@@ -891,9 +928,9 @@ export function JobDetailView(props: DetailProps) {
                     </span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {props.knownFacts.map((fact) => (
+                    {props.knownFacts.map((fact, index) => (
                       <div
-                        key={fact.label}
+                        key={`${fact.label}-${index}`}
                         className={`p-3 rounded-lg bg-surface-container-low flex items-start gap-3 ${fact.wide ? "md:col-span-2" : ""}`}
                       >
                         <span className="material-symbols-outlined text-[#15803D] text-[20px] shrink-0">
@@ -915,7 +952,10 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: Still needed before fixed estimate */}
               {props.missingFields.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-missing"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#D97706]"></span>
@@ -959,46 +999,33 @@ export function JobDetailView(props: DetailProps) {
                 </article>
               )}
 
-              {/* v1 Card: Evidence & telemetry */}
-              {props.evidenceTimeline.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-headline-md text-headline-md text-on-surface">
-                      Intake evidence &amp; telemetry
-                    </h2>
-                    <span className="font-label-md text-label-md text-outline flex items-center gap-1">
-                      {props.auditCount} events logged to the audit trail
-                      <span className="material-symbols-outlined text-[16px]">verified</span>
-                    </span>
-                  </div>
-                  <div className="relative pl-6 flex flex-col gap-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container-highest">
-                    {props.evidenceTimeline.map((event) => (
-                      <div key={event.id} className="relative flex items-start justify-between gap-4">
-                        <span
-                          className={`absolute -left-6 top-1 w-2.5 h-2.5 rounded-full ring-4 ring-surface-container-lowest ${
-                            event.tone === "primary" ? "bg-primary" : "bg-secondary"
-                          }`}
-                        ></span>
-                        <div className="flex flex-col">
-                          <span className="font-label-md text-label-md text-on-surface font-semibold">
-                            {event.title}
-                          </span>
-                          <span className="font-body-sm text-body-sm text-on-surface-variant">
-                            {event.sub}
-                          </span>
-                        </div>
-                        <span className="font-data-mono text-body-sm text-on-surface-variant whitespace-nowrap">
-                          {event.time}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              )}
             </>
           )}
 
-          {props.quotePanel}
+          <AddEvidencePanel jobId={props.jobId} onRecordVoice={() => setModal("note")} />
+
+          {/* server-rendered panel — the explicit key keeps React happy now that
+              it sits in a static children array with the other cards */}
+          {props.quotePanel && <Fragment key="quote-panel">{props.quotePanel}</Fragment>}
+
+          {/* Destructive action — kept at the very bottom, away from daily flow */}
+          <div className="flex items-center justify-between gap-space-md rounded-xl border border-error/20 bg-error/5 p-space-md">
+            <div className="flex flex-col min-w-0">
+              <span className="font-label-lg text-label-lg text-on-surface">Delete this enquiry</span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">
+                Removes the enquiry with its evidence, scope versions and drafts. This cannot be undone.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={deleteEnquiry}
+              disabled={busy === "delete"}
+              className="shrink-0 h-10 px-4 rounded-lg border border-error/40 text-error font-label-lg text-label-lg flex items-center gap-2 hover:bg-error/10 transition-colors disabled:opacity-60"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+              <span>{busy === "delete" ? "Deleting…" : "Delete"}</span>
+            </button>
+          </div>
         </div>
 
         {/* RIGHT COLUMN */}
@@ -1006,7 +1033,10 @@ export function JobDetailView(props: DetailProps) {
           {isV2 ? (
             <>
               {/* v2 Card 1: Strong Amber/Red Recommendation Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-triggers"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-start gap-space-sm">
                   <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 shadow-sm">
                     <span className="material-symbols-outlined text-[24px]">warning</span>
@@ -1030,8 +1060,8 @@ export function JobDetailView(props: DetailProps) {
                   <span className="font-label-sm text-label-sm text-on-surface font-semibold">
                     Why this changed:
                   </span>
-                  {props.advisory.reasons.map((reason) => (
-                    <div key={reason} className="flex items-start gap-2">
+                  {props.advisory.reasons.map((reason, index) => (
+                    <div key={`${reason}-${index}`} className="flex items-start gap-2">
                       <span className="material-symbols-outlined text-[16px] text-amber-700 shrink-0 mt-0.5">
                         {props.inspectionRecommended ? "water_damage" : "check_circle"}
                       </span>
@@ -1054,7 +1084,10 @@ export function JobDetailView(props: DetailProps) {
               </section>
 
               {/* v2 Card 2: Next Best Action Card */}
-              <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <section
+                id="sec-missing"
+                className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+              >
                 <div className="flex items-center justify-between">
                   <h3 className="font-headline-sm text-headline-sm text-on-surface">
                     Recommended Next Action
@@ -1121,6 +1154,58 @@ export function JobDetailView(props: DetailProps) {
                   </button>
                 </div>
               </section>
+
+              {/* v2 Card: Assumptions & exclusions */}
+              {(props.assumptions.length > 0 || props.exclusions.length > 0) && (
+                <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                  <div
+                    id="sec-assumptions"
+                    className="flex flex-col gap-2.5 scroll-mt-32"
+                  >
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Assumptions
+                    </h3>
+                    {props.assumptions.length === 0 && (
+                      <p className="font-body-sm text-body-sm text-on-surface-variant">
+                        None recorded for this scope.
+                      </p>
+                    )}
+                    {props.assumptions.map((item, index) => (
+                      <div key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          check
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          {item}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    id="sec-exclusions"
+                    className="flex flex-col gap-2.5 pt-3 border-t border-border scroll-mt-32"
+                  >
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Exclusions
+                    </h3>
+                    {props.exclusions.length === 0 && (
+                      <p className="font-body-sm text-body-sm text-on-surface-variant">
+                        None recorded for this scope.
+                      </p>
+                    )}
+                    {props.exclusions.map((item, index) => (
+                      <div key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          close
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          {item}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           ) : (
             <>
@@ -1184,8 +1269,8 @@ export function JobDetailView(props: DetailProps) {
                     </button>
                     {showWhy && (
                       <ul className="flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant pl-1">
-                        {props.advisory.reasons.map((reason) => (
-                          <li key={reason} className="flex items-start gap-2">
+                        {props.advisory.reasons.map((reason, index) => (
+                          <li key={`${reason}-${index}`} className="flex items-start gap-2">
                             <span className="text-[#D97706] font-bold">•</span>
                             <span>{reason}</span>
                           </li>
@@ -1198,10 +1283,13 @@ export function JobDetailView(props: DetailProps) {
 
               {/* v1 Card: Scope assumptions */}
               {props.assumptions.length > 0 && (
-                <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <article
+                  id="sec-assumptions"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
                   <div className="flex items-center justify-between">
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                      Scope assumptions
+                      Assumptions
                     </h3>
                     <button
                       className="w-8 h-8 rounded-lg hover:bg-surface-container-low text-on-surface-variant flex items-center justify-center transition-colors"
@@ -1213,8 +1301,8 @@ export function JobDetailView(props: DetailProps) {
                     </button>
                   </div>
                   <ul className="flex flex-col gap-2.5 font-body-sm text-body-sm text-on-surface-variant">
-                    {props.assumptions.map((assumption) => (
-                      <li key={assumption} className="flex items-start gap-2">
+                    {props.assumptions.map((assumption, index) => (
+                      <li key={`${assumption}-${index}`} className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
                           check
                         </span>
@@ -1227,6 +1315,63 @@ export function JobDetailView(props: DetailProps) {
                       Assumptions apply until tradie site inspection
                     </span>
                   </div>
+                </article>
+              )}
+
+              {/* v1 Card: Inspection triggers */}
+              {props.inspectionTriggers.length > 0 && (
+                <article
+                  id="sec-triggers"
+                  className="bg-[#FFFBEB] rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-headline-sm text-headline-sm text-[#92400E] font-semibold">
+                      Inspection triggers
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] font-data-mono text-label-sm font-semibold">
+                      {props.inspectionTriggers.length} active
+                    </span>
+                  </div>
+                  <ul className="flex flex-col gap-2.5">
+                    {props.inspectionTriggers.map((trigger, index) => (
+                      <li key={`${trigger}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-[#D97706] text-[18px] shrink-0 mt-0.5">
+                          warning_amber
+                        </span>
+                        <span className="font-body-sm text-body-sm text-[#92400E]">{trigger}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="font-label-sm text-label-sm text-[#92400E]/80">
+                    Any active trigger locks fixed pricing until the trigger is cleared on site.
+                  </p>
+                </article>
+              )}
+
+              {/* v1 Card: Exclusions */}
+              {props.exclusions.length > 0 && (
+                <article
+                  id="sec-exclusions"
+                  className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Exclusions
+                    </h3>
+                    <span className="font-data-mono text-label-sm text-on-surface-variant">
+                      {props.exclusions.length} items
+                    </span>
+                  </div>
+                  <ul className="flex flex-col gap-2.5 font-body-sm text-body-sm text-on-surface-variant">
+                    {props.exclusions.map((item, index) => (
+                      <li key={`${item}-${index}`} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-outline text-[16px] mt-0.5">
+                          close
+                        </span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               )}
 
@@ -1274,48 +1419,24 @@ export function JobDetailView(props: DetailProps) {
           )}
 
           {/* Trust / Guardrail Card (shared) */}
-          {isV2 ? (
-            <section className="w-full bg-surface-container-low rounded-xl p-space-md shadow-sm flex flex-col gap-3">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[18px]">verified</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold">
-                    Tradie Oversight
-                  </span>
-                  <span className="font-label-md text-label-md text-on-surface">
-                    Qualified Assessment Enforced
-                  </span>
-                </div>
-              </div>
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                AI assists scope preparation. Final trade assessment and warranty responsibility
-                remains with the qualified professional.
-              </p>
-              <div className="pt-2 border-t-0 flex flex-col gap-0.5">
-                <span className="font-label-md text-label-md text-on-surface">Alex Miller</span>
-                <span className="font-data-mono text-[11px] text-primary">
-                  Master Plumbers Victoria Member #9042
-                </span>
-              </div>
-            </section>
-          ) : (
-            <article className="bg-surface-container-low rounded-xl p-space-md flex items-start gap-3">
-              <span className="material-symbols-outlined text-primary text-[22px] shrink-0 mt-0.5">
-                verified_user
+          <article className="bg-surface-container-low rounded-xl p-space-md flex items-start gap-3">
+            <span className="material-symbols-outlined text-primary text-[22px] shrink-0 mt-0.5">
+              verified_user
+            </span>
+            <div className="flex flex-col gap-1">
+              <span className="font-label-md text-label-md text-on-surface font-semibold">
+                Human review required
               </span>
-              <div className="flex flex-col gap-1">
-                <span className="font-label-md text-label-md text-on-surface font-semibold">
-                  Tradie Oversight Guaranteed
-                </span>
-                <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                  QuoteReady assists scope readiness. All prices and customer messages require tradie
-                  approval before dispatch.
-                </p>
-              </div>
-            </article>
-          )}
+              <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                QuoteReady assists scope readiness. Final trade assessment and warranty
+                responsibility stay with the qualified professional, and every price and customer
+                message needs your approval before dispatch.
+              </p>
+              <span className="font-data-mono text-[11px] text-on-surface-variant">
+                Reviewed by {props.operatorName}
+              </span>
+            </div>
+          </article>
         </div>
       </div>
 
@@ -1332,14 +1453,14 @@ export function JobDetailView(props: DetailProps) {
                   Scope history &amp; review stage
                 </h2>
                 <span className="font-body-sm text-body-sm text-on-surface-variant">
-                  Track intake revisions and Alex&apos;s trade sign-off status
+                  Track intake revisions and your trade sign-off status
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#D97706] animate-pulse"></span>
               <span className="font-label-md text-label-md text-on-surface font-semibold">
-                Awaiting Alex&apos;s review &amp; sign-off
+                Awaiting your review &amp; sign-off
               </span>
             </div>
           </div>
@@ -1372,11 +1493,10 @@ export function JobDetailView(props: DetailProps) {
                 <span className="font-data-mono text-label-sm text-on-surface-variant">Pending</span>
               </div>
               <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                Tradie Review Stage
+                Your review stage
               </span>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Alex Miller currently reviewing photo captures against standard Melbourne
-                inner-north callout fees.
+                Reviewing the photo captures against your standard callout rates.
               </p>
             </div>
             <div className="p-space-md rounded-xl bg-surface-container flex flex-col gap-2 opacity-60">
@@ -1397,8 +1517,8 @@ export function JobDetailView(props: DetailProps) {
           {/* Tradie Sign-off Action Bar */}
           <div className="pt-2 flex flex-wrap items-center justify-between gap-space-md">
             <span className="font-body-sm text-body-sm text-on-surface-variant">
-              Review completed by: <strong className="text-on-surface">Alex Miller</strong> (Owner /
-              Plumber)
+              Review completed by: <strong className="text-on-surface">{props.operatorName}</strong>{" "}
+              (Owner / Tradie)
             </span>
             <div className="flex flex-wrap items-center gap-space-sm">
               <button

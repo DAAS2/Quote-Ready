@@ -68,8 +68,8 @@ export function AuthPanel({ mode }: { mode: "login" | "signup" }) {
   }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm p-7 sm:p-8">
+    <div className="w-full max-w-[26rem] sm:max-w-md">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm p-6 sm:p-8">
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <Logo href="/" tone="light" />
           <div>
@@ -197,7 +197,8 @@ export function AuthPanel({ mode }: { mode: "login" | "signup" }) {
           View the live demo — no account needed
         </button>
         <p className="mt-3 text-center font-label-sm text-label-sm text-on-surface-variant">
-          The demo workspace ships with 13 seeded enquiries so you can try the whole flow instantly.
+          New accounts start with a clean workspace and a short interactive tour — you create your
+          first enquiry yourself, step by step.
         </p>
       </div>
     </div>

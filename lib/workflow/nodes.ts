@@ -35,6 +35,12 @@ export async function extract_job_facts_with_gemini(
 ): Promise<Partial<WorkflowStateType>> {
   if (state.validation_error) return {};
 
+  // Guided tour / rehearsal: skip the vision pass entirely and go straight to
+  // the deterministic engine so the scope is ready the moment it is asked for.
+  if (state.force_fallback) {
+    return fallback(state, state.image_paths.length, "forced_fallback");
+  }
+
   const { images, failures } = await loadImages(state.image_paths);
 
   if (isDemoMode() || !GEMINI_CONFIGURED) {

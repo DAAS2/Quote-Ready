@@ -243,6 +243,13 @@ export class MemoryStore implements Store {
     const job = jobs.get(jobId);
     if (!job) return;
     job.evidence.push(...items);
+    // keep image_paths in sync with photo evidence (Supabase derives them from
+    // evidence rows, so both stores must expose the same shape)
+    const newPaths = items
+      .filter((e) => e.type === "photo_observation" && e.storage_path)
+      .map((e) => e.storage_path as string)
+      .filter((p) => !job.image_paths.includes(p));
+    if (newPaths.length > 0) job.image_paths = [...job.image_paths, ...newPaths];
     job.updated_at = nowIso();
   }
 
@@ -430,6 +437,13 @@ export class MemoryStore implements Store {
 
   async deleteQuote(id: string): Promise<void> {
     quotes.delete(id);
+  }
+
+  async deleteJob(id: string): Promise<void> {
+    jobs.delete(id);
+    for (const [quoteId, quote] of quotes) {
+      if (quote.job_id === id) quotes.delete(quoteId);
+    }
   }
 
   async listQuoteNumbers(): Promise<string[]> {

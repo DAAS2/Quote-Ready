@@ -96,6 +96,148 @@ function builtInEditorState(base: JobType): EditorState {
   };
 }
 
+/** Blank custom template — the "create a new service category" starting point. */
+function newTemplateEditor(): EditorState {
+  return {
+    ...builtInEditorState("leaking_tap"),
+    name: "New custom template",
+    editingBuiltin: false,
+    is_default: false,
+    fields: [],
+    conditions: [],
+    assumptions: [],
+    exclusions: [],
+    questions: {},
+  };
+}
+
+interface TemplateDetailSource {
+  required_fields?: Array<{
+    key: string;
+    label: string;
+    critical: boolean;
+    ask_customer: boolean;
+    why: string;
+  }>;
+  inspection_conditions?: Array<{
+    label: string;
+    any_risk_flag?: string[];
+    any_fact?: Array<{ key: string }>;
+  }>;
+  assumptions?: string[];
+  exclusions?: string[];
+  questions?: Record<string, string>;
+}
+
+/**
+ * Inline template detail — shows the actual required details, inspection
+ * triggers, assumptions and exclusions on the main templates page (no need to
+ * open a modal to see what a template really enforces).
+ */
+function TemplateDetailPanels({ doc }: { doc: TemplateDetailSource }) {
+  const fields = doc.required_fields ?? [];
+  const triggers = doc.inspection_conditions ?? [];
+  const assumptions = doc.assumptions ?? [];
+  const exclusions = doc.exclusions ?? [];
+  return (
+    <div className="flex flex-col gap-3 pt-3 border-t border-border">
+      <div className="flex flex-wrap gap-1.5">
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {fields.length} required details
+        </span>
+        <span className="px-2 py-0.5 rounded bg-[#FEF3C7] text-[#92400E] font-label-sm text-label-sm">
+          {triggers.length} inspection trigger{triggers.length === 1 ? "" : "s"}
+        </span>
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {assumptions.length} assumptions
+        </span>
+        <span className="px-2 py-0.5 rounded bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant">
+          {exclusions.length} exclusions
+        </span>
+      </div>
+
+      {fields.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Required details
+          </span>
+          {fields.map((f) => (
+            <div key={`${f.key}-${f.label}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-primary text-[16px] mt-0.5 shrink-0">
+                {f.critical ? "error" : "check_circle"}
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="font-label-md text-label-md text-on-surface flex flex-wrap items-center gap-1.5">
+                  {f.label}
+                  {f.critical && (
+                    <span className="px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#B91C1C] font-label-sm text-[10px] uppercase">
+                      Critical
+                    </span>
+                  )}
+                  <span className="px-1.5 py-0.5 rounded bg-surface-container-low text-on-surface-variant font-label-sm text-[10px]">
+                    {f.ask_customer ? "Ask customer" : "On site"}
+                  </span>
+                </span>
+                {f.why && (
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">{f.why}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {triggers.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Inspection triggers
+          </span>
+          {triggers.map((c, i) => (
+            <div key={`${c.label}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[#D97706] text-[16px] mt-0.5 shrink-0">
+                warning_amber
+              </span>
+              <span className="font-body-sm text-body-sm text-[#92400E]">{c.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {assumptions.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Assumptions
+          </span>
+          {assumptions.map((a, i) => (
+            <div key={`${a}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">
+                check
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">{a}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {exclusions.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            Exclusions
+          </span>
+          {exclusions.map((x, i) => (
+            <div key={`${x}-${i}`} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">
+                close
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">{x}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function fromRow(row: TemplateRow): EditorState {
   const doc = row.document;
   return {
@@ -151,14 +293,28 @@ function toDocument(state: EditorState): JobTemplate {
 
 export function TemplatesManager({
   initialTemplates,
+  autoNew = false,
 }: {
   initialTemplates: TemplateRow[];
+  /** Opened from the enquiry form's "create a new service category" option. */
+  autoNew?: boolean;
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates);
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(() =>
+    autoNew ? newTemplateEditor() : null,
+  );
   const [busy, setBusy] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  /**
+   * Collapsible cards. Undefined means "use the default": the first three
+   * templates are open and everything after them starts collapsed, so the grid
+   * never opens as one long wall of text.
+   */
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const isCardOpen = (key: string, index: number) => openCards[key] ?? index < 3;
+  const toggleCard = (key: string, index: number) =>
+    setOpenCards((prev) => ({ ...prev, [key]: !(prev[key] ?? index < 3) }));
   const [viewing, setViewing] = useState<{
     name: string;
     blurb: string;
@@ -393,7 +549,7 @@ export function TemplatesManager({
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors disabled:opacity-60"
-            onClick={() => setEditor({ ...builtInEditorState("leaking_tap"), name: "New custom template", editingBuiltin: false, is_default: false, fields: [], conditions: [], assumptions: [], exclusions: [], questions: {} })}
+            onClick={() => setEditor(newTemplateEditor())}
             type="button"
           >
             <span className="material-symbols-outlined text-[18px] align-middle mr-1">add</span>
@@ -812,11 +968,12 @@ export function TemplatesManager({
       )}
 
       {/* Template cards */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
+      <div data-tour="templates-list" className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
         {/* Built-ins (editable → saved as overrides) */}
-        {BASE_TYPES.map((base) => {
+        {BASE_TYPES.map((base, bi) => {
           const overridden = templates.find((t) => t.base_type === base.value && t.is_default);
           const t = JOB_TEMPLATES[base.value];
+          const open = isCardOpen(base.value, bi);
           return (
             <div
               key={base.value}
@@ -843,6 +1000,17 @@ export function TemplatesManager({
                       Customised
                     </span>
                   )}
+                  <button
+                    className="w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-low flex items-center justify-center transition-colors"
+                    onClick={() => toggleCard(base.value, bi)}
+                    aria-expanded={open}
+                    aria-label={`${open ? "Collapse" : "Expand"} ${overridden ? overridden.name : t.label}`}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {open ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
                   {/* 3-dot menu */}
                   <div className="relative">
                     <button
@@ -859,7 +1027,8 @@ export function TemplatesManager({
                           className="w-full text-left px-3 py-2 font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors flex items-center gap-2"
                           onClick={() => {
                             setMenuFor(null);
-                            overridden ? viewRow(overridden) : viewBuiltin(base.value);
+                            if (overridden) viewRow(overridden);
+                            else viewBuiltin(base.value);
                           }}
                           type="button"
                         >
@@ -895,7 +1064,12 @@ export function TemplatesManager({
                   </div>
                 </div>
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">{t.blurb}</p>
+              {open && (
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant">{t.blurb}</p>
+                  <TemplateDetailPanels doc={overridden ? overridden.document : t} />
+                </>
+              )}
             </div>
           );
         })}
@@ -903,7 +1077,7 @@ export function TemplatesManager({
         {/* Custom templates */}
         {templates
           .filter((t) => !t.is_default || !JOB_TEMPLATES[t.base_type])
-          .map((t) => (
+          .map((t, ci) => (
             <div
               key={t.id}
               className="bg-surface-container-lowest rounded-xl shadow-sm p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
@@ -927,6 +1101,17 @@ export function TemplatesManager({
                   <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm whitespace-nowrap">
                     {BASE_TYPES.find((b) => b.value === t.base_type)?.label}
                   </span>
+                  <button
+                    className="w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-low flex items-center justify-center transition-colors"
+                    onClick={() => toggleCard(t.id, BASE_TYPES.length + ci)}
+                    aria-expanded={isCardOpen(t.id, BASE_TYPES.length + ci)}
+                    aria-label={`${isCardOpen(t.id, BASE_TYPES.length + ci) ? "Collapse" : "Expand"} ${t.name}`}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isCardOpen(t.id, BASE_TYPES.length + ci) ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
                   {/* 3-dot menu */}
                   <div className="relative">
                     <button
@@ -977,9 +1162,14 @@ export function TemplatesManager({
                   </div>
                 </div>
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                {t.blurb || "Custom service template."}
-              </p>
+              {isCardOpen(t.id, BASE_TYPES.length + ci) && (
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant">
+                    {t.blurb || "Custom service template."}
+                  </p>
+                  <TemplateDetailPanels doc={t.document} />
+                </>
+              )}
             </div>
           ))}
       </div>
@@ -989,7 +1179,7 @@ export function TemplatesManager({
         <div className="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
           <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
           <span>
-            <strong>Plumber verified:</strong> Templates encode trade judgement — QuoteReady never
+            <strong>Tradie verified:</strong> Templates encode trade judgement — QuoteReady never
             prices work or diagnoses faults on its own.
           </span>
         </div>

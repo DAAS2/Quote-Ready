@@ -7,11 +7,14 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
+    // `?fast=1` runs the deterministic engine and skips the live model — used by
+    // the guided tour so its enquiry is reviewable immediately.
+    const fast = new URL(request.url).searchParams.get("fast") === "1";
     const job = await store.getJob(id);
     if (!job) {
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
@@ -29,6 +32,7 @@ export async function POST(
       image_paths: job.image_paths,
       existing_version: (job.scope_version ?? 0) + (job.scope ? 1 : 0),
       ...(template ? { template } : {}),
+      ...(fast ? { force_fallback: true } : {}),
     });
 
     if (!result.scope) {

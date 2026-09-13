@@ -43,15 +43,18 @@ async function ensureDemoOrg(): Promise<void> {
 }
 
 /**
- * Seed the demo jobs for the current organisation (idempotent: only when the
- * org has no jobs). New sign-ups get the full 13-enquiry demo workspace.
+ * Seed the demo jobs for the shared demo organisation (idempotent: only when
+ * the demo org has no jobs). Signed-in users get an empty workspace instead.
  */
 export async function ensureSeeded(): Promise<"supabase" | "memory" | "skipped"> {
   const db = getServerSupabase();
   if (db) {
     try {
       const orgId = await resolveOrgId(db);
-      if (orgId === DEMO_ORG_ID) await ensureDemoOrg();
+      // Real (signed-in) workspaces start completely empty — demo enquiries,
+      // templates and audit history live only in the shared anonymous demo org.
+      if (orgId !== DEMO_ORG_ID) return "skipped";
+      await ensureDemoOrg();
 
       const { count, error } = await db
         .from("jobs")
@@ -113,6 +116,7 @@ export const store = {
     withFallback((s) => s.updateJobFacts(...args)),
   updateEnquiryText: (id: string, enquiryText: string) =>
     withFallback((s) => s.updateEnquiryText(id, enquiryText)),
+  deleteJob: (id: string) => withFallback((s) => s.deleteJob(id)),
   addEvidence: (...args: Parameters<Store["addEvidence"]>) =>
     withFallback((s) => s.addEvidence(...args)),
   setJobStatus: (...args: Parameters<Store["setJobStatus"]>) =>

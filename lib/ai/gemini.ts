@@ -2,8 +2,10 @@ import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import {
   GeminiAnalysisSchema,
+  IntakeExtractionSchema,
   VoiceUpdateSchema,
   type GeminiAnalysis,
+  type IntakeExtraction,
   type ScopePack,
   type VoiceUpdate,
 } from "./schemas";
@@ -11,8 +13,10 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   VOICE_UPDATE_SYSTEM_PROMPT,
   SITE_NOTE_TRANSCRIPTION_PROMPT,
+  INTAKE_FIELD_SYSTEM_PROMPT,
   buildExtractionUserPrompt,
   buildVoiceUpdateUserPrompt,
+  buildIntakeFieldUserPrompt,
   RECOMMENDATION_SYSTEM_PROMPT,
   buildRecommendationUserPrompt,
 } from "./prompts";
@@ -196,6 +200,52 @@ export async function transcribeSiteNote(input: {
     throw new GeminiError("Gemini returned an empty response", "empty_response");
   }
   return text.trim();
+}
+
+/* ── Voice-intake: transcript → new-enquiry form fields ──────────────────── */
+
+export async function extractIntakeFields(transcript: string): Promise<IntakeExtraction> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: buildIntakeFieldUserPrompt(transcript) }] }],
+      config: {
+        systemInstruction: INTAKE_FIELD_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(stripToFence(text));
+  } catch {
+    json = tryExtractJsonObject(text);
+    if (json === undefined) {
+      throw new GeminiError("Gemini response was not valid JSON", "invalid_json");
+    }
+  }
+
+  const parsed = IntakeExtractionSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new GeminiError(
+      `Intake extraction failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      "schema",
+    );
+  }
+  return parsed.data;
 }
 
 /* ── Voice-note structured update ────────────────────────────────────────── */

@@ -91,6 +91,38 @@ export function buildVoiceUpdateUserPrompt(transcript: string): string {
   return `PLUMBER'S SPOKEN SITE NOTE:\n"${transcript}"`;
 }
 
+export const INTAKE_FIELD_SYSTEM_PROMPT = `You are the voice-intake assistant for QuoteReady. A tradie or their customer dictated an enquiry. Convert the transcript into the fields of a new-enquiry form.
+
+Rules:
+1. Extract only details the speaker actually stated. Omit any field you did not hear — never invent or guess.
+2. customer_name: the customer's name if given.
+3. phone: digits only, keep spacing as spoken (e.g. "0412 884 921").
+4. email: only if explicitly dictated.
+5. suburb: suburb and postcode if given (e.g. "Brunswick, VIC 3056").
+6. job_type: one of leaking_tap | toilet_repair | hot_water_system.
+7. message: a clean, first-person summary of the problem in the speaker's own words. Keep trade terminology intact. 1-3 sentences.
+8. availability: when the customer is available, as stated.
+9. urgency: emergency | urgent | standard | flexible.
+10. property_type: only if stated (e.g. "Single storey brick").
+11. Return ONLY valid JSON matching the schema. No markdown, no commentary.
+
+Schema:
+{
+  "customer_name"?: string,
+  "phone"?: string,
+  "email"?: string,
+  "suburb"?: string,
+  "job_type"?: "leaking_tap" | "toilet_repair" | "hot_water_system",
+  "message"?: string,
+  "availability"?: string,
+  "urgency"?: "emergency" | "urgent" | "standard" | "flexible",
+  "property_type"?: string
+}`;
+
+export function buildIntakeFieldUserPrompt(transcript: string): string {
+  return `SPOKEN ENQUIRY TRANSCRIPT:\n"${transcript}"`;
+}
+
 export const SITE_NOTE_TRANSCRIPTION_PROMPT = `Transcribe this spoken plumbing site note verbatim, in Australian English.
 
 Rules:

@@ -22,6 +22,11 @@ export const WorkflowState = Annotation.Root({
   existing_version: Annotation<number>,
   /** custom (user-edited) service template the job is graded against */
   template: Annotation<JobTemplate | null>,
+  /** skip the live model and use the deterministic engine (guided tour, prep) */
+  force_fallback: Annotation<boolean>({
+    reducer: (_a, b) => b,
+    default: () => false,
+  }),
 
   /** extraction result (ai or fallback) */
   analysis: Annotation<GeminiAnalysis | null>({

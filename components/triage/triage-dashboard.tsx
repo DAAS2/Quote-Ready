@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import type { TriageRow } from "@/lib/ui/triage";
 import { displayRef } from "@/lib/ui/triage";
@@ -18,26 +19,52 @@ type TabKey = "all" | "needs_info" | "inspection" | "ready";
  */
 export function TriageDashboard({
   greeting,
+  region,
   rows,
   counts,
   totalActive,
   voiceJobId,
+  emptyState = false,
   variant = "overview",
 }: {
   greeting: string;
+  region?: string | null;
   rows: TriageRow[];
   counts: { needsInfo: number; inspection: number; ready: number };
   totalActive: number;
   voiceJobId: string | null;
+  emptyState?: boolean;
   variant?: "overview" | "jobs";
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [suburb, setSuburb] = useState("All Suburbs");
-  const [sort, setSort] = useState<"updated" | "readiness" | "urgency">("updated");
+  const [sort, setSort] = useState<"attention" | "updated" | "readiness" | "urgency">(
+    "attention",
+  );
   const [page, setPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  /** Remove an enquiry straight from the list. */
+  async function removeRow(id: string, name: string) {
+    if (!window.confirm(`Delete the enquiry from ${name}? This cannot be undone.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not delete the enquiry.");
+      toast.success("Enquiry deleted.");
+      router.refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<string | null>(voiceJobId);
 
   const suburbs = useMemo(
     () => Array.from(new Set(rows.map((r) => r.suburb).filter(Boolean))).sort(),
@@ -65,7 +92,18 @@ export function TriageDashboard({
     if (suburb !== "All Suburbs") out = out.filter((r) => r.suburb === suburb);
     if (sort === "readiness") out = [...out].sort((a, b) => b.readiness - a.readiness);
     else if (sort === "urgency") out = [...out].sort((a, b) => a.updatedAtMs - b.updatedAtMs);
-    else out = [...out].sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+    else if (sort === "attention") {
+      // surface what actually needs a human: safety/incomplete first, then
+      // newest activity, so real jobs needing attention rise to the top
+      const weight = (r: TriageRow) => {
+        if (r.statusLabel === "Attention required") return 0;
+        if (r.statusLabel === "Needs information") return 1;
+        if (r.statusLabel === "Inspection recommended") return 2;
+        if (r.statusLabel === "Ready for estimate") return 3;
+        return 4;
+      };
+      out = [...out].sort((a, b) => weight(a) - weight(b) || b.updatedAtMs - a.updatedAtMs);
+    } else out = [...out].sort((a, b) => b.updatedAtMs - a.updatedAtMs);
     return out;
   }, [rows, tab, search, suburb, sort]);
 
@@ -107,22 +145,23 @@ export function TriageDashboard({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
-            <span className="material-symbols-outlined text-secondary text-[18px]">near_me</span>
-            <span className="font-label-md text-label-md text-on-surface">
-              Melbourne North Region
-            </span>
-          </div>
+          {region && (
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
+              <span className="material-symbols-outlined text-secondary text-[18px]">near_me</span>
+              <span className="font-label-md text-label-md text-on-surface">{region}</span>
+            </div>
+          )}
           <button
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors"
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors disabled:opacity-50"
             type="button"
-            onClick={() => setVoiceOpen(true)}
-            disabled={!voiceJobId}
+            onClick={() => setVoicePickerOpen(true)}
+            disabled={rows.length === 0}
           >
             <span className="material-symbols-outlined text-tertiary text-[20px]">mic</span>
-            <span>Import voice note</span>
+            <span>Add voice note to…</span>
           </button>
           <Link
+            data-tour="new-enquiry"
             className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary/90 transition-all"
             href="/jobs/new"
           >
@@ -217,18 +256,17 @@ export function TriageDashboard({
               All critical photos, dimensions &amp; scope items validated
             </p>
           </div>
-          <div className="mt-4 pt-3 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-container/20 text-primary font-label-sm text-label-sm">
+          <div className="mt-4 pt-3 flex items-center gap-2">              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-container/20 text-primary font-label-sm text-label-sm">
               <span className="material-symbols-outlined text-[14px]">check</span>
-              Ready for Alex&apos;s review &amp; approval
+              Ready for your review &amp; approval
             </span>
           </div>
         </div>
       </div>
       )}
 
-      {/* Today's Triage Insight Card */}
-      {variant === "overview" && (
+      {/* Today's Triage Insight Card (demo workspace only) */}
+      {variant === "overview" && !emptyState && (
       <div className="bg-surface-container-low rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-9 h-9 rounded-lg bg-secondary-container/50 flex items-center justify-center flex-shrink-0">
@@ -325,6 +363,7 @@ export function TriageDashboard({
                 onChange={(e) => setSort(e.target.value as typeof sort)}
                 className="h-9 pl-3 pr-8 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md appearance-none focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
               >
+                <option value="attention">Sort: Needs attention first</option>
                 <option value="updated">Sort: Last updated</option>
                 <option value="readiness">Sort: Readiness high-to-low</option>
                 <option value="urgency">Sort: Urgency (Oldest first)</option>
@@ -343,25 +382,25 @@ export function TriageDashboard({
         </div>
         {/* Data Table Layout */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[560px] text-left">
             <thead>
               <tr className="bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
                 <th className="py-3 px-5 font-label-sm" scope="col">
                   Customer &amp; Contact
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[280px]" scope="col">
-                  Plumbing Issue &amp; Scope Details
+                <th className="py-3 px-4 font-label-sm min-w-[200px] md:min-w-[280px]" scope="col">
+                  Job Issue &amp; Scope Details
                 </th>
-                <th className="py-3 px-4 font-label-sm" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm sm:table-cell" scope="col">
                   Location
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[220px]" scope="col">
+                <th className="py-3 px-4 font-label-sm min-w-[170px] md:min-w-[220px]" scope="col">
                   Scope Readiness
                 </th>
-                <th className="py-3 px-4 font-label-sm" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm md:table-cell" scope="col">
                   Triage Status
                 </th>
-                <th className="py-3 px-4 font-label-sm whitespace-nowrap" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm whitespace-nowrap lg:table-cell" scope="col">
                   Last Updated
                 </th>
                 <th className="py-3 px-5 text-right font-label-sm" scope="col">
@@ -420,7 +459,7 @@ export function TriageDashboard({
                       </div>
                     )}
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap sm:table-cell">
                     <div className="font-body-md text-body-md text-on-surface">{row.suburb}</div>
                     <div className="font-body-sm text-body-sm text-on-surface-variant">
                       {row.postcode}
@@ -456,7 +495,7 @@ export function TriageDashboard({
                       </span>
                     </div>
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap md:table-cell">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-medium",
@@ -469,27 +508,70 @@ export function TriageDashboard({
                       {row.statusLabel}
                     </span>
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant lg:table-cell">
                     {row.updatedAt}
                   </td>
                   <td className="py-4 px-5 align-top text-right whitespace-nowrap">
-                    <Link
-                      href={`/jobs/${row.id}`}
-                      className={cn(
-                        "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md transition-all",
-                        row.actionButton,
-                      )}
-                    >
-                      <span>Review scope</span>
-                      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                    </Link>
+                    <div className="inline-flex items-center gap-1.5">
+                      <Link
+                        href={`/jobs/${row.id}`}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md transition-all",
+                          row.actionButton,
+                        )}
+                      >
+                        <span className="hidden sm:inline">Review scope</span>
+                        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(row.id, row.name)}
+                        disabled={deletingId === row.id}
+                        aria-label={`Delete enquiry from ${row.name}`}
+                        title="Delete enquiry"
+                        className="w-8 h-8 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 flex items-center justify-center transition-colors disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {deletingId === row.id ? "progress_activity" : "delete"}
+                        </span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td className="py-10 px-5 text-center font-body-md text-body-md text-on-surface-variant" colSpan={7}>
-                    No enquiries match these filters.
+                  <td className="py-10 px-5 text-center" colSpan={7}>
+                    {totalActive === 0 && emptyState ? (
+                      <div className="flex flex-col items-center gap-3 py-4">
+                        <div className="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center">
+                          <span className="material-symbols-outlined text-primary text-[26px]">
+                            inbox
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-headline-sm text-headline-sm text-on-surface">
+                            No enquiries yet
+                          </span>
+                          <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
+                            Your workspace is empty. Create your first enquiry — QuoteReady analyses
+                            it and tells you what is still needed before a fixed estimate.
+                          </p>
+                        </div>
+                        <Link
+                          href="/jobs/new"
+                          data-tour="new-enquiry"
+                          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg shadow-sm hover:bg-primary/90 transition-all"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">add</span>
+                          <span>New enquiry</span>
+                        </Link>
+                      </div>
+                    ) : (
+                      <span className="font-body-md text-body-md text-on-surface-variant">
+                        No enquiries match these filters.
+                      </span>
+                    )}
                   </td>
                 </tr>
               )}
@@ -548,17 +630,81 @@ export function TriageDashboard({
         <div className="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
           <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
           <span>
-            <strong>Plumber verified:</strong> All job scopes and customer enquiries require tradie
+            <strong>Tradie verified:</strong> All job scopes and customer enquiries require tradie
             review and owner sign-off before quotes are generated.
           </span>
         </div>
       </div>
 
-      {/* Import voice note → record-site-note modal for the newest job */}
-      {voiceOpen && voiceJobId && (
+      {/* Pick which job the voice note belongs to */}
+      {voicePickerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-[#102A43]/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setVoicePickerOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose a job for the voice note"
+        >
+          <div
+            className="w-full max-w-lg bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-tertiary text-[20px]">mic</span>
+                <div className="flex flex-col">
+                  <span className="font-headline-sm text-headline-sm text-on-surface">
+                    Which job is this voice note for?
+                  </span>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">
+                    The recording is transcribed and folded into that job&apos;s scope.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setVoicePickerOpen(false)}
+                className="p-1.5 rounded-lg text-outline hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto custom-scroll">
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => {
+                    setVoiceTarget(row.id);
+                    setVoicePickerOpen(false);
+                    setVoiceOpen(true);
+                  }}
+                  className="w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-surface-container-low transition-colors border-b border-border/60 last:border-b-0"
+                >
+                  <span className="flex flex-col min-w-0">
+                    <span className="font-label-lg text-label-lg text-on-surface truncate">
+                      {row.name} · {row.title}
+                    </span>
+                    <span className="font-data-mono text-label-sm text-on-surface-variant">
+                      {displayRef(row.id)} · {row.suburb}
+                    </span>
+                  </span>
+                  <span className={cn("px-2 py-0.5 rounded-full font-label-sm text-label-sm", row.statusPill)}>
+                    {row.statusLabel}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record the note against the chosen job */}
+      {voiceOpen && voiceTarget && (
         <RecordSiteNoteModal
-          jobId={voiceJobId}
-          jobRef={displayRef(voiceJobId)}
+          jobId={voiceTarget}
+          jobRef={displayRef(voiceTarget)}
           onClose={() => setVoiceOpen(false)}
           onApplied={(id) => {
             setVoiceOpen(false);

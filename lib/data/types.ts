@@ -136,6 +136,8 @@ export interface Store {
     imagePaths: string[],
   ): Promise<void>;
   updateEnquiryText(id: string, enquiryText: string): Promise<void>;
+  /** hard-delete an enquiry and everything hanging off it */
+  deleteJob(id: string): Promise<void>;
   addEvidence(jobId: string, items: EvidenceRow[]): Promise<void>;
   setJobStatus(jobId: string, status: JobStatus): Promise<void>;
   addDraft(
