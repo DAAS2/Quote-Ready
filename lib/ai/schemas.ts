@@ -173,6 +173,50 @@ export const RecommendedActionSchema = z.object({
 });
 export type RecommendedAction = z.infer<typeof RecommendedActionSchema>;
 
+/* ── Retrieved service guidance (RAG — informs wording, never decisions) ─── */
+export const GuidanceNoteSchema = z.object({
+  id: z.string().max(80),
+  title: z.string().max(160),
+  body: z.string().max(700),
+  source: z.string().max(80).default("QuoteReady service playbook"),
+  reference: z.string().max(40).default("QR-PB-000"),
+  job_type: z.string().max(40).default("any"),
+  /** cosine similarity when retrieved by vector, normalised match score otherwise */
+  score: z.number().min(0).max(1).default(0),
+  /** the fact values / risk ids this note answered to — shown as the reason */
+  matched_on: z.array(z.string().max(60)).max(10).default([]),
+});
+export type GuidanceNote = z.infer<typeof GuidanceNoteSchema>;
+
+export const RetrievalModeEnum = z.enum(["vector", "lexical", "skipped"]);
+export type RetrievalMode = z.infer<typeof RetrievalModeEnum>;
+
+/* ── Per-run telemetry (latency + token accounting) ──────────────────────── */
+export const AnalysisMetricsSchema = z.object({
+  model: z.string().max(80).nullable().default(null),
+  prompt_tokens: z.number().int().nonnegative().default(0),
+  output_tokens: z.number().int().nonnegative().default(0),
+  total_tokens: z.number().int().nonnegative().default(0),
+  /** end-to-end wall time for the analysis run */
+  duration_ms: z.number().int().nonnegative().default(0),
+  /** per-node wall time, for spotting which step is actually slow */
+  nodes: z.record(z.string(), z.number().nonnegative()).default({}),
+  retrieval: z
+    .object({
+      mode: RetrievalModeEnum.default("skipped"),
+      notes: z.number().int().nonnegative().default(0),
+      ms: z.number().int().nonnegative().default(0),
+    })
+    .default({ mode: "skipped", notes: 0, ms: 0 }),
+  /**
+   * Estimated spend for the run. Always an estimate: the rate card it used is
+   * named in `cost_basis` so the operator can audit the arithmetic.
+   */
+  estimated_cost_usd: z.number().nonnegative().default(0),
+  cost_basis: z.string().max(160).default(""),
+});
+export type AnalysisMetrics = z.infer<typeof AnalysisMetricsSchema>;
+
 export const ScopePackSchema = z.object({
   version: z.number().int().positive(),
   job_type: JobTypeEnum,
@@ -194,6 +238,10 @@ export const ScopePackSchema = z.object({
   /** populated when the pack was produced by a fallback instead of live AI */
   produced_by: z.enum(["ai_analysis", "voice_update", "manual_edit", "fallback", "seed"]),
   override_reasons: z.array(z.string().max(160)).max(10).default([]),
+  /** cited service playbook notes for this job's facts (empty when unavailable) */
+  guidance: z.array(GuidanceNoteSchema).max(6).default([]),
+  /** latency + token accounting for the run that produced this version */
+  metrics: AnalysisMetricsSchema.optional(),
 });
 export type ScopePack = z.infer<typeof ScopePackSchema>;
 

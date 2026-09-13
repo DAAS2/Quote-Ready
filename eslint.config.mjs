@@ -12,7 +12,15 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated coverage report (gitignored, not our source)
+    "coverage/**",
   ]),
+  {
+    // Dev-only Playwright/utility scripts run under Node, where require() is
+    // the correct module system rather than a code smell.
+    files: ["scripts/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

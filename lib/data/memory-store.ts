@@ -7,7 +7,7 @@ import type {
   QuoteTotals,
 } from "@/lib/quotes/schema";
 import { DEMO_JOB_SEEDS } from "./demo-seed";
-import { buildSeedPack, SEED_AGE_HOURS } from "./seed";
+import { buildSeedPack, seedGuidance, SEED_AGE_HOURS } from "./seed";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
 import type {
   AuditFeedRow,
@@ -73,7 +73,7 @@ function ensureSeed(): void {
   if (jobs.size > 0) return;
   for (const seed of DEMO_JOB_SEEDS) {
     const id = crypto.randomUUID();
-    const pack = buildSeedPack(seed);
+    const pack = seedGuidance(buildSeedPack(seed));
     const created = hoursAgo(SEED_AGE_HOURS[seed.ref]);
     const evidence: EvidenceRow[] = seed.evidence.map((e, i) => ({
       ...e,

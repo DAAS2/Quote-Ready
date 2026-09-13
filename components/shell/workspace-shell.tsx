@@ -43,6 +43,18 @@ const NAV_ITEMS: ShellNavItem[] = [
     tour: "nav-templates",
     match: (p) => p.startsWith("/templates"),
   },
+  {
+    href: "/evaluation",
+    label: "Evaluation",
+    icon: "rule_settings",
+    match: (p) => p.startsWith("/evaluation"),
+  },
+  {
+    href: "/how-it-works",
+    label: "How it works",
+    icon: "account_tree",
+    match: (p) => p.startsWith("/how-it-works"),
+  },
 ];
 
 const ALERT_ICONS: Record<string, { icon: string; tone: string }> = {

@@ -44,7 +44,7 @@ function save(png, name) {
 
 const SLATE = [241, 245, 249], CARD = [255, 255, 255], NAVY = [30, 41, 59],
       BLUE = [37, 99, 235], GREY = [148, 163, 184], STEEL = [100, 116, 139],
-      AMBER = [217, 119, 6], RED = [220, 38, 38];
+      AMBER = [217, 119, 6];
 
 /* tap-1.jpg — basin mixer tap on a vanity (top-down-ish) */
 {

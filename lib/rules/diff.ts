@@ -20,6 +20,14 @@ export interface PackDiff {
   new_missing: string[];
   action_changed: boolean;
   score_delta: number;
+  /**
+   * Retrieved guidance that arrived with this version (by title). A site note
+   * that adds facts can change which playbook notes apply — reviewers see that
+   * change rather than having guidance swap silently underneath them.
+   */
+  new_guidance: string[];
+  /** guidance that no longer applies to this job's facts */
+  dropped_guidance: string[];
 }
 
 const FACT_LABELS: Record<string, string> = {
@@ -47,6 +55,9 @@ export function diffPacks(prev: ScopePack, next: ScopePack): PackDiff {
   const resolved = [...prevMissing].filter((k) => !nextMissing.has(k));
   const added = [...nextMissing].filter((k) => !prevMissing.has(k));
 
+  const prevGuidance = new Set((prev.guidance ?? []).map((g) => g.id));
+  const nextGuidance = new Set((next.guidance ?? []).map((g) => g.id));
+
   return {
     field_changes: fieldChanges,
     new_risk_flags: newFlags,
@@ -54,6 +65,12 @@ export function diffPacks(prev: ScopePack, next: ScopePack): PackDiff {
     new_missing: added.map((k) => FACT_LABELS[k] ?? k),
     action_changed: prev.recommended_action.type !== next.recommended_action.type,
     score_delta: next.readiness_score - prev.readiness_score,
+    new_guidance: (next.guidance ?? [])
+      .filter((g) => !prevGuidance.has(g.id))
+      .map((g) => g.title),
+    dropped_guidance: (prev.guidance ?? [])
+      .filter((g) => !nextGuidance.has(g.id))
+      .map((g) => g.title),
   };
 }
 

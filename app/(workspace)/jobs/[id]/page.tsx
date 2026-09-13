@@ -7,6 +7,7 @@ import { QuotePanel } from "@/components/quotes/quote-panel";
 import type { DraftRow, JobDetail } from "@/lib/data/types";
 import type { ScopePack } from "@/lib/ai/schemas";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
+import { lexicalGuidance } from "@/lib/ai/retrieval";
 import { displayRef, jobTitle, suburbParts, statusBadge, readinessTone } from "@/lib/ui/triage";
 import { initials, relativeTime, titleCase } from "@/lib/utils/format";
 
@@ -282,6 +283,27 @@ export default async function JobDetailPage({
 
   const drafts: DraftRow[] = job.drafts;
 
+  /**
+   * Service guidance is a DERIVED view over the curated playbook, so it can
+   * always be rebuilt. Versions stored before retrieval existed — or saved while
+   * the vector index was unavailable — carry none, and this fills the gap with
+   * the deterministic ranker over the same corpus the analysis path uses.
+   *
+   * Display only: the readiness score, band, overrides and safety routing all
+   * stay exactly as stored on the version.
+   */
+  const guidance =
+    (scope?.guidance?.length ?? 0) > 0
+      ? scope!.guidance
+      : scope
+        ? lexicalGuidance({
+            job_type: scope.job_type,
+            facts: scope.facts,
+            risk_flags: scope.risk_flags.map((f) => f.id),
+            missing_fields: scope.missing_fields.map((m) => m.key),
+          })
+        : [];
+
   return (
     <JobDetailView
       jobId={job.id}
@@ -363,6 +385,34 @@ export default async function JobDetailPage({
       diffRows={buildDiffRows(prevVersion, scope ?? versions[0] ?? null)}
       hasScope={Boolean(scope)}
       inspectionRecommended={scope?.inspection_recommended ?? false}
+      guidance={guidance.map((g) => ({
+        id: g.id,
+        title: g.title,
+        body: g.body,
+        source: g.source,
+        reference: g.reference,
+        score: g.score,
+        matched_on: g.matched_on,
+      }))}
+      retrievalMode={
+        scope?.metrics?.retrieval.mode ?? (guidance.length > 0 ? "lexical" : "skipped")
+      }
+      analysisMetrics={
+        scope?.metrics
+          ? {
+              model: scope.metrics.model,
+              duration_ms: scope.metrics.duration_ms,
+              total_tokens: scope.metrics.total_tokens,
+              estimated_cost_usd: scope.metrics.estimated_cost_usd,
+              cost_basis: scope.metrics.cost_basis,
+              retrieval: {
+                mode: scope.metrics.retrieval.mode,
+                notes: scope.metrics.retrieval.notes,
+                ms: scope.metrics.retrieval.ms,
+              },
+            }
+          : null
+      }
       voiceEvidence={
         lastVoice
           ? {

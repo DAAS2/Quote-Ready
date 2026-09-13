@@ -1,5 +1,6 @@
 import type { ScopePack } from "@/lib/ai/schemas";
 import { buildScopePack } from "@/lib/rules/engine";
+import { lexicalGuidance } from "@/lib/ai/retrieval";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
 import { DEMO_JOB_SEEDS, type DemoJobSeed } from "./demo-seed";
 import type { CreateJobInput, Store } from "./types";
@@ -20,6 +21,26 @@ export function buildSeedPack(seed: DemoJobSeed, version = 1): ScopePack {
     version,
     produced_by: "seed",
   });
+}
+
+/**
+ * Seed packs carry guidance too, so a pre-analysed demo job shows the same
+ * playbook card a live analysis would.
+ *
+ * This uses the deterministic retrieval tier on purpose: seeding runs inside
+ * page rendering for the demo workspace and must stay synchronous and keyless.
+ * A live analysis upgrades to the vector tier on its own (lib/ai/retrieval.ts).
+ */
+export function seedGuidance(pack: ScopePack): ScopePack {
+  return {
+    ...pack,
+    guidance: lexicalGuidance({
+      job_type: pack.job_type,
+      facts: pack.facts,
+      risk_flags: pack.risk_flags.map((f) => f.id),
+      missing_fields: pack.missing_fields.map((m) => m.key),
+    }),
+  };
 }
 
 export function seedJobInputs(): CreateJobInput[] {

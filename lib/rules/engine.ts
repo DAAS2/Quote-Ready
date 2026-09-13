@@ -1,6 +1,8 @@
 import {
   EMPTY_FACTS,
+  type AnalysisMetrics,
   type EvidenceItem,
+  type GuidanceNote,
   type JobFacts,
   type JobType,
   type MissingField,
@@ -41,6 +43,13 @@ export interface ScopePackInput {
   produced_by: ScopePack["produced_by"];
   /** custom (user-edited) template — overrides the built-in template for this run */
   template?: JobTemplate;
+  /**
+   * Retrieved service guidance. Passed in rather than computed here so this
+   * function stays pure and LLM-free — it never influences any decision below.
+   */
+  guidance?: GuidanceNote[];
+  /** latency + token accounting for the run, when the caller measured it */
+  metrics?: AnalysisMetrics;
 }
 
 const CAP_INSPECTION = 69;
@@ -184,6 +193,8 @@ export function buildScopePack(input: ScopePackInput): ScopePack {
     evidence: input.evidence,
     produced_by: input.produced_by,
     override_reasons: overrideReasons,
+    guidance: input.guidance ?? [],
+    ...(input.metrics ? { metrics: input.metrics } : {}),
   };
 }
 

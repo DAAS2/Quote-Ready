@@ -3,6 +3,7 @@ import { DEMO_ORG_ID, resolveOrgId } from "./org";
 import { memoryStore } from "./memory-store";
 import { SupabaseStore } from "./supabase-store";
 import { buildSeedPack } from "./seed";
+import { retrieveServiceGuidance } from "@/lib/ai/retrieval";
 import { DEMO_JOB_SEEDS } from "./demo-seed";
 import type { Store } from "./types";
 
@@ -70,7 +71,17 @@ export async function ensureSeeded(): Promise<"supabase" | "memory" | "skipped">
             enquiry_text: seed.enquiry_text,
             image_paths: seed.image_paths,
           });
-          const pack = buildSeedPack(seed);
+          // Seeded demo jobs get the same playbook guidance a live analysis
+          // would: the vector tier when embeddings are configured, the
+          // deterministic tier otherwise (it can never fail the seed).
+          const base = buildSeedPack(seed);
+          const guidance = await retrieveServiceGuidance({
+            job_type: base.job_type,
+            facts: base.facts,
+            risk_flags: base.risk_flags.map((f) => f.id),
+            missing_fields: base.missing_fields.map((m) => m.key),
+          });
+          const pack = { ...base, guidance: guidance.notes };
           await store.updateJobFacts(jobId, pack.facts, pack, []);
           if (seed.seed_draft) {
             await store.addDraft(jobId, seed.seed_draft);
