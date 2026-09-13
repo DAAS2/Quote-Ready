@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -52,8 +52,7 @@ function HeroShowcase() {
     }
   }, [stage]);
 
-  function runAnalysis() {
-    if (stage !== "intake") return;
+  const runAnalysis = useCallback(() => {
     setStage("analysing");
     setProgress(0);
     let p = 0;
@@ -66,19 +65,35 @@ function HeroShowcase() {
       }
       setProgress(p);
     }, 130);
-  }
+  }, []);
 
-  function approve() {
-    if (stage !== "scoped") return;
+  const approve = useCallback(() => {
     setStage("sent");
     setNotifications((n) => n + 1);
-  }
+  }, []);
 
-  function replay() {
+  const replay = useCallback(() => {
     setStage("intake");
     setProgress(0);
     setTyped("");
-  }
+  }, []);
+
+  // Endless auto-play: intake → analysing → scoped draft → approved → replay.
+  useEffect(() => {
+    if (stage === "intake") {
+      const t = setTimeout(runAnalysis, 1800);
+      return () => clearTimeout(t);
+    }
+    if (stage === "scoped") {
+      const t = setTimeout(approve, 4200);
+      return () => clearTimeout(t);
+    }
+    if (stage === "sent") {
+      const t = setTimeout(replay, 4600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [stage, runAnalysis, approve, replay]);
 
   const analysed = stage === "scoped" || stage === "sent";
   const dashOffset = 88 * (1 - progress / 100);
@@ -86,41 +101,63 @@ function HeroShowcase() {
   return (
     <div ref={root} className="w-full max-w-5xl mt-12 text-left">
       <div className="rounded-xl overflow-hidden bg-surface-container-lowest shadow-[0_12px_36px_rgba(16,42,67,0.09)] transition-all">
-        {/* Window Chrome Header */}
-        <div className="h-11 bg-surface-container-high px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-outline-variant/60"></div>
-            <div className="w-3 h-3 rounded-full bg-outline-variant/60"></div>
-            <div className="w-3 h-3 rounded-full bg-outline-variant/60"></div>
-            <div className="hidden sm:flex items-center ml-3 px-3 py-1 rounded bg-surface-container-lowest text-on-surface-variant font-data-mono text-label-sm gap-2">
-              <span className="material-symbols-outlined text-[14px] text-primary">lock</span>
-              <span>app.quoteready.com.au/jobs/QR-2024-089</span>
+        {/* Realistic browser chrome */}
+        <div className="bg-surface-container-high">
+          {/* Tab strip */}
+          <div className="flex items-end gap-2 px-3 pt-2.5">
+            <div className="flex items-center gap-1.5 pb-2 pl-1">
+              <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+              <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+              <span className="w-3 h-3 rounded-full bg-[#28c840]" />
             </div>
+            <div className="flex items-center gap-2 rounded-t-lg bg-surface-container-lowest px-3 py-1.5 max-w-[280px] min-w-0">
+              <BrandLogoSvg tone="light" wordmark={false} className="h-4 w-4 shrink-0" />
+              <span className="font-body-sm text-body-sm text-on-surface truncate">
+                Job QR-2024-089 · QuoteReady
+              </span>
+              <span className="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0">
+                close
+              </span>
+            </div>
+            <span className="material-symbols-outlined text-[18px] text-on-surface-variant pb-2">
+              add
+            </span>
           </div>
-          <div className="flex items-center gap-3 font-label-sm text-label-sm text-on-surface-variant">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-              <span>Audit Sync Active</span>
-            </span>
-            {/* Live notification bell (clickable) */}
-            <span className="relative flex items-center">
-              <button
-                type="button"
-                aria-label={`Notifications (${notifications})`}
-                className="relative p-1 rounded-lg hover:bg-surface-container-lowest/60 transition-colors"
-                onClick={() => setNotifications(0)}
-              >
-                <span className="material-symbols-outlined text-[18px]">notifications</span>
-                {notifications > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-error text-on-error font-data-mono text-[8px] font-bold flex items-center justify-center">
-                    {notifications}
-                  </span>
-                )}
-              </button>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-surface-container text-on-surface hidden sm:inline">
-              VBA Lic: #10429
-            </span>
+          {/* Toolbar + address bar */}
+          <div className="flex items-center gap-2 px-3 py-2">
+            <div className="hidden sm:flex items-center gap-2 text-on-surface-variant">
+              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+              <span className="material-symbols-outlined text-[18px] opacity-40">arrow_forward</span>
+              <span className="material-symbols-outlined text-[18px]">refresh</span>
+            </div>
+            <div className="flex-1 flex items-center gap-2 min-w-0 h-8 px-3 rounded-full bg-surface-container-lowest text-on-surface-variant font-data-mono text-label-sm shadow-sm">
+              <span className="material-symbols-outlined text-[14px] text-[#15803D]">lock</span>
+              <span className="truncate">
+                app.quoteready.com.au/jobs/QR-2024-089
+              </span>
+            </div>
+            <div className="hidden md:flex items-center gap-3 font-label-sm text-label-sm text-on-surface-variant">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                <span>Audit Sync Active</span>
+              </span>
+              {/* Live notification bell (clickable) */}
+              <span className="relative flex items-center">
+                <button
+                  type="button"
+                  aria-label={`Notifications (${notifications})`}
+                  className="relative p-1 rounded-lg hover:bg-surface-container-lowest/60 transition-colors"
+                  onClick={() => setNotifications(0)}
+                >
+                  <span className="material-symbols-outlined text-[18px]">notifications</span>
+                  {notifications > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-error text-on-error font-data-mono text-[8px] font-bold flex items-center justify-center">
+                      {notifications}
+                    </span>
+                  )}
+                </button>
+              </span>
+            </div>
           </div>
         </div>
         {/* Job Header Bar inside Mockup */}
@@ -590,35 +627,39 @@ export function LandingPage() {
             </span>
           </Link>
           <nav className="hidden lg:flex items-center gap-space-lg">
-            <Link aria-current="page" className="transition-colors text-primary font-label-lg" href="/#top">
+            <a
+              aria-current="page"
+              className="transition-colors text-primary font-label-lg"
+              href="#top"
+            >
               Product
-            </Link>
-            <Link
+            </a>
+            <a
               className="font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors"
-              href="/#how-it-works"
+              href="#how-it-works"
             >
               How it works
-            </Link>
-            <Link
+            </a>
+            <a
               className="font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors"
-              href="/#evidence-voice"
+              href="#evidence-voice"
             >
               Evidence &amp; Voice
-            </Link>
-            <Link
+            </a>
+            <a
               className="font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors"
-              href="/#features"
+              href="#features"
             >
               Features
-            </Link>
-            <Link
+            </a>
+            <a
               className="font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors"
-              href="/#cta"
+              href="#cta"
             >
-              Testimonials
-            </Link>
+              CTA
+            </a>
           </nav>
-          <div className="flex items-center gap-space-md">
+          <div className="flex items-center gap-space-sm sm:gap-space-md">
             <Link
               className="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface px-space-md py-space-sm rounded-lg transition-colors"
               href="/login"
@@ -626,17 +667,10 @@ export function LandingPage() {
               Sign in
             </Link>
             <Link
-              className="inline-flex items-center justify-center h-10 px-space-lg rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors shadow-[0_1px_2px_rgba(16,42,67,0.08)]"
-              href="/dashboard"
+              className="inline-flex items-center justify-center h-10 px-4 sm:px-space-lg rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors shadow-[0_1px_2px_rgba(16,42,67,0.08)]"
+              href="/signup"
             >
-              Open live demo
-            </Link>
-            <Link
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"
-              href="/login"
-              aria-label="Account"
-            >
-              <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
+              Register
             </Link>
           </div>
         </div>
@@ -650,17 +684,6 @@ export function LandingPage() {
             <div className="hero-blob-2 w-[600px] h-[300px] rounded-full bg-primary-fixed/20 blur-2xl opacity-40 translate-x-1/3 -translate-y-1/4"></div>
           </div>
           <div className="max-w-7xl mx-auto px-margin flex flex-col items-center text-center">
-            {/* Eyebrow Pill */}
-            <div className="hero-el inline-flex items-center gap-space-xs px-space-md py-1 rounded-full bg-surface-container-high text-primary font-label-md text-label-md mb-6 shadow-sm">
-              <span className="material-symbols-outlined text-[16px] text-primary">
-                verified_user
-              </span>
-              <span>AI-assisted scope readiness for trades</span>
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary"></span>
-              <span className="text-on-surface-variant font-label-sm text-label-sm">
-                Melbourne &amp; VIC Standards
-              </span>
-            </div>
             {/* Main Headline */}
             <h1 className="hero-el font-headline-lg md:font-display-lg text-headline-lg md:text-display-lg text-on-surface max-w-4xl tracking-tight leading-tight mb-5">
               Know what you need <br className="hidden sm:inline" />
@@ -668,7 +691,7 @@ export function LandingPage() {
             </h1>
             {/* Supporting Copy */}
             <p className="hero-el font-body-lg text-body-lg text-on-surface-variant max-w-2xl mb-8 text-balance">
-              QuoteReady turns incomplete plumbing enquiries into structured job scopes,
+              QuoteReady turns incomplete trade enquiries into structured job scopes,
               missing-detail checklists, and clear next steps—so your team quotes with absolute
               confidence.
             </p>
@@ -707,7 +730,7 @@ export function LandingPage() {
           </div>
         </section>
         {/* Section 2: Methodology / 4 Horizontal Steps */}
-        <section className="w-full py-16 md:py-24 bg-surface-container-low/40" id="how-it-works">
+        <section className="w-full py-16 md:py-24 bg-surface-container-low/40 scroll-mt-16" id="how-it-works">
           <div className="max-w-7xl mx-auto px-margin">
             {/* Section Header */}
             <div className="text-center max-w-3xl mx-auto mb-16" data-reveal>
@@ -719,7 +742,7 @@ export function LandingPage() {
               </h2>
               <p className="font-body-lg text-body-lg text-on-surface-variant text-balance">
                 Eliminate underquoted jobs, surprise site variations, and time wasted driving across
-                Melbourne for unvetted work.
+                town for unvetted work.
               </p>
             </div>
             {/* 4 Step Cards Grid */}
@@ -766,7 +789,7 @@ export function LandingPage() {
                   </h3>
                   <p className="font-body-md text-body-md text-on-surface-variant">
                     Extracts fixture type, clearance, accessibility constraints, and compliance tags
-                    referencing AS/NZS 3500 requirements.
+                    referencing relevant Australian Standards.
                   </p>
                 </div>
                 <div className="pt-6 mt-4">
@@ -817,7 +840,7 @@ export function LandingPage() {
                     Review next action
                   </h3>
                   <p className="font-body-md text-body-md text-on-surface-variant">
-                    The licensed plumber reviews pre-drafted clarification SMS or books a paid
+                    The licensed tradie reviews pre-drafted clarification SMS or books a paid
                     diagnostic site visit with a single click.
                   </p>
                 </div>
@@ -832,7 +855,7 @@ export function LandingPage() {
           </div>
         </section>
         {/* Section 3: Split Feature - Voice Notes Become Scope Evidence */}
-        <section className="w-full py-16 md:py-24 bg-surface" id="evidence-voice">
+        <section className="w-full py-16 md:py-24 bg-surface scroll-mt-16" id="evidence-voice">
           <div className="max-w-7xl mx-auto px-margin">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-center">
               {/* Left Column: Copy & Trade Context */}
@@ -858,7 +881,7 @@ export function LandingPage() {
                       <strong className="font-semibold">
                         Hands-free field capture in under 20 seconds.
                       </strong>{" "}
-                      Plumbers speak naturally into their mobile browser while packing tools.
+                      Tradies speak naturally into their mobile browser while packing tools.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -866,11 +889,9 @@ export function LandingPage() {
                       <span className="material-symbols-outlined text-[16px]">check</span>
                     </div>
                     <p className="font-body-md text-body-md text-on-surface">
-                      <strong className="font-semibold">
-                        Understands Victorian plumbing vernacular.
-                      </strong>{" "}
-                      Accurately interprets ceramic disc spindles, mini-stops, brass nipples,
-                      breeching pieces, and PVC gullies.
+                      <strong className="font-semibold">Understands trade vernacular.</strong>{" "}
+                      Accurately interprets fixture types, isolation valves, access notes, and
+                      site-specific shorthand.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -1021,7 +1042,7 @@ export function LandingPage() {
           </div>
         </section>
         {/* Section 4: Three Benefit Cards */}
-        <section className="w-full py-16 md:py-24 bg-surface-container-low/40" id="features">
+        <section className="w-full py-16 md:py-24 bg-surface-container-low/40 scroll-mt-16" id="features">
           <div className="max-w-7xl mx-auto px-margin">
             <div className="text-center max-w-2xl mx-auto mb-16" data-reveal>
               <span className="font-label-md text-label-md text-primary font-semibold tracking-wider uppercase mb-2 block">
@@ -1105,7 +1126,7 @@ export function LandingPage() {
                       100%
                     </span>
                     <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">
-                      VBA &amp; Master Plumber aligned audit log
+                      Standards &amp; trade-aligned audit log
                     </span>
                   </div>
                 </div>
@@ -1114,13 +1135,13 @@ export function LandingPage() {
           </div>
         </section>
         {/* Section 5: High-Impact Navy Call-To-Action Banner */}
-        <section className="w-full py-16 md:py-24" id="cta">
+        <section className="w-full py-16 md:py-24 scroll-mt-16" id="cta">
           <div className="max-w-7xl mx-auto px-margin" data-reveal>
             <div className="bg-[#102A43] text-[#ffffff] rounded-3xl p-8 md:p-16 relative overflow-hidden shadow-2xl">
               {/* Architectural Grid Background Accent */}
               <div className="absolute -right-20 -bottom-20 w-96 h-96 rounded-full bg-primary-container/20 blur-3xl pointer-events-none"></div>
               <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <span className="material-symbols-outlined text-[140px]">plumbing</span>
+                <span className="material-symbols-outlined text-[140px]">handyman</span>
               </div>
               <div className="relative z-10 max-w-2xl">
                 <span className="font-label-sm text-label-sm text-primary-fixed uppercase tracking-wider font-semibold block mb-3">
@@ -1187,8 +1208,8 @@ export function LandingPage() {
                 </span>
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant max-w-sm">
-                Scope-readiness software for trade businesses. Built for plumber and tradie
-                oversight across Melbourne and Victorian residential specialists.
+                Scope-readiness software for trade businesses. Built for tradie oversight across
+                Australian residential trade teams.
               </p>
               <div className="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
                 <span className="material-symbols-outlined text-[16px] text-primary">
@@ -1204,19 +1225,19 @@ export function LandingPage() {
                 </span>
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#top"
+                  href="#top"
                 >
                   Product
                 </Link>
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#features"
+                  href="#features"
                 >
                   Features
                 </Link>
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#how-it-works"
+                  href="#how-it-works"
                 >
                   How it works
                 </Link>
@@ -1233,13 +1254,13 @@ export function LandingPage() {
                 </Link>
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#cta"
+                  href="#cta"
                 >
                   Customer Stories
                 </Link>
                 <Link
                   className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#evidence-voice"
+                  href="#evidence-voice"
                 >
                   Trade Assurance
                 </Link>
@@ -1260,20 +1281,19 @@ export function LandingPage() {
                 >
                   Terms
                 </Link>
-                <Link
-                  className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  href="/#evidence-voice"
-                >
-                  Trade Assurance
-                </Link>
-              </div>
+              <Link
+                className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                href="#evidence-voice"
+              >
+                Trade Assurance
+              </Link>
             </div>
+          </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-lg text-on-surface-variant font-label-sm text-label-sm">
             <p>© 2025 QuoteReady Systems Pty Ltd. All rights reserved.</p>
             <p className="text-center sm:text-right">
-              Victorian Building Authority (VBA) &amp; Master Plumbers aligned operational
-              frameworks.
+              Australian Standards &amp; trade-aligned operational frameworks.
             </p>
           </div>
         </div>
