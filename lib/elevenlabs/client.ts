@@ -23,14 +23,20 @@ function getClient(): ElevenLabsClient {
 export class ElevenLabsError extends Error {
   constructor(
     message: string,
-    public readonly kind: "not_configured" | "api" | "voice_not_available",
+    public readonly kind: "not_configured" | "api" | "voice_not_available" | "no_speech",
   ) {
     super(message);
     this.name = "ElevenLabsError";
   }
 }
 
-/** Transcribe a field recording with Scribe. */
+/**
+ * Transcribe a field recording with Scribe.
+ *
+ * Throws `kind: "no_speech"` when the API accepts and decodes the audio but
+ * hears no speech in it — that is a recording problem (silent / wrong input
+ * device / stopped too early), not an API failure, and callers should say so.
+ */
 export async function transcribeAudio(
   buffer: Buffer,
   filename: string,
@@ -45,7 +51,13 @@ export async function transcribeAudio(
     });
     const transcript = response.text?.trim();
     if (!transcript) {
-      throw new ElevenLabsError("Transcription returned empty text", "api");
+      console.warn(
+        `[QuoteReady] Scribe decoded the audio but heard no speech (${filename}, ${mimeType || "unknown"}, ${buffer.length} bytes).`,
+      );
+      throw new ElevenLabsError(
+        "No speech was detected in that recording",
+        "no_speech",
+      );
     }
     return transcript;
   } catch (error) {

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
-import { transcribeAudio, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client";
-import { transcribeWithFish, FISH_AUDIO_CONFIGURED } from "@/lib/fish/client";
+import { transcribeAudio, ELEVENLABS_CONFIGURED, ElevenLabsError } from "@/lib/elevenlabs/client";
 import { extractVoiceUpdate, GEMINI_CONFIGURED, GeminiError } from "@/lib/ai/gemini";
 import { isDemoMode } from "@/lib/ai/demo-mode";
 import { buildVoicePreview, deterministicVoiceUpdate } from "@/lib/ai/voice";
@@ -17,7 +16,7 @@ const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
  * compute the diff — but persist NOTHING until the operator applies it.
  * Body: multipart with `audio` file, or JSON { transcript }.
  *
- * STT order: Fish Speech (Fish Audio) → ElevenLabs Scribe → manual paste.
+ * STT: ElevenLabs Scribe (`scribe_v1`) only → manual paste if unavailable.
  */
 export async function POST(
   request: Request,
@@ -32,7 +31,7 @@ export async function POST(
 
     const contentType = request.headers.get("content-type") ?? "";
     let transcript: string;
-    let transcriptionSource: "fish" | "elevenlabs" | "manual";
+    let transcriptionSource: "elevenlabs" | "manual";
 
     if (contentType.includes("multipart/form-data")) {
       let form: FormData;
@@ -55,7 +54,7 @@ export async function POST(
       if (audio.size > MAX_AUDIO_BYTES) {
         return NextResponse.json({ error: "Recording is too large (max 15MB)." }, { status: 400 });
       }
-      if (isDemoMode() || (!FISH_AUDIO_CONFIGURED && !ELEVENLABS_CONFIGURED)) {
+      if (isDemoMode() || !ELEVENLABS_CONFIGURED) {
         return NextResponse.json(
           {
             error: "Transcription is unavailable in this mode. Paste the transcript instead.",
@@ -69,51 +68,25 @@ export async function POST(
       const filename = audio.name || "site-note.webm";
       const mimeType = audio.type;
 
-      // 1. Fish Speech ASR first
-      if (FISH_AUDIO_CONFIGURED) {
-        try {
-          transcript = await transcribeWithFish(audioBuffer, filename, mimeType);
-          transcriptionSource = "fish";
-        } catch (error) {
-          console.warn("[QuoteReady] Fish ASR failed, trying ElevenLabs:", (error as Error).message);
-          if (ELEVENLABS_CONFIGURED) {
-            try {
-              transcript = await transcribeAudio(audioBuffer, filename, mimeType);
-              transcriptionSource = "elevenlabs";
-            } catch (fallbackError) {
-              console.warn("[QuoteReady] ElevenLabs STT also failed:", (fallbackError as Error).message);
-              return NextResponse.json(
-                {
-                  error: "Transcription failed — you can paste the transcript instead.",
-                  demo_transcript: DEMO_VOICE_NOTE.transcript,
-                },
-                { status: 503 },
-              );
-            }
-          } else {
-            return NextResponse.json(
-              {
-                error: "Transcription failed — you can paste the transcript instead.",
-                demo_transcript: DEMO_VOICE_NOTE.transcript,
-              },
-              { status: 503 },
-            );
-          }
-        }
-      } else {
-        try {
-          transcript = await transcribeAudio(audioBuffer, filename, mimeType);
-          transcriptionSource = "elevenlabs";
-        } catch (error) {
-          console.warn("[QuoteReady] STT failed:", (error as Error).message);
+      // ElevenLabs Scribe is the only speech-to-text engine.
+      try {
+        transcript = await transcribeAudio(audioBuffer, filename, mimeType);
+        transcriptionSource = "elevenlabs";
+      } catch (error) {
+        if (error instanceof ElevenLabsError && error.kind === "no_speech") {
           return NextResponse.json(
-            {
-              error: "Transcription failed — you can paste the transcript instead.",
-              demo_transcript: DEMO_VOICE_NOTE.transcript,
-            },
-            { status: 503 },
+            { error: "No speech was detected in that recording — check the microphone and try again." },
+            { status: 422 },
           );
         }
+        console.warn("[QuoteReady] ElevenLabs Scribe failed:", (error as Error).message);
+        return NextResponse.json(
+          {
+            error: "Transcription failed — you can paste the transcript instead.",
+            demo_transcript: DEMO_VOICE_NOTE.transcript,
+          },
+          { status: 503 },
+        );
       }
     } else {
       const body = (await request.json().catch(() => null)) as { transcript?: string } | null;

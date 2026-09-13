@@ -114,14 +114,14 @@ export async function extractJobFacts(input: {
 }
 
 /** Tolerate accidental markdown fences around the JSON. */
-function stripToFence(text: string): string {
+export function stripToFence(text: string): string {
   const trimmed = text.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
 /** Find the first balanced top-level JSON object/array in arbitrary text. */
-function tryExtractJsonObject(text: string): unknown | undefined {
+export function tryExtractJsonObject(text: string): unknown | undefined {
   const candidates: string[] = [];
   const starts: number[] = [];
   const stack: string[] = [];

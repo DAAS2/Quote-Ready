@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { transcribeSiteNote, GEMINI_CONFIGURED, GeminiError } from "@/lib/ai/gemini";
-import { transcribeAudio, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client";
+import { transcribeAudio, ELEVENLABS_CONFIGURED, ElevenLabsError } from "@/lib/elevenlabs/client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +11,8 @@ const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
  * Multipart: { audio: Blob } — the recorded site-note audio.
  * Returns { transcript } (verbatim). Nothing is persisted here; the user
  * reviews the transcript before applying it via /apply.
- * Engines: ElevenLabs Scribe first (dedicated STT), Gemini audio as fallback.
+ * Engine: ElevenLabs Scribe (`scribe_v1`) is the only speech-to-text engine.
+ * If it is unavailable, the operator can type or paste the transcript instead.
  */
 export async function POST(
   request: Request,
@@ -21,7 +21,7 @@ export async function POST(
   try {
     await params; // job context (route lives under [id]); audio is self-contained
 
-    if (!ELEVENLABS_CONFIGURED && !GEMINI_CONFIGURED) {
+    if (!ELEVENLABS_CONFIGURED) {
       return NextResponse.json(
         { error: "Automatic transcription is not configured — type or paste the transcript instead." },
         { status: 503 },
@@ -39,40 +39,34 @@ export async function POST(
 
     const buffer = Buffer.from(await audio.arrayBuffer());
     const mimeType = (audio.type && audio.type !== "" ? audio.type : "audio/webm").split(";")[0]!;
-
-    // 1. ElevenLabs Scribe (purpose-built speech-to-text)
-    if (ELEVENLABS_CONFIGURED) {
-      try {
-        const transcript = await transcribeAudio(buffer, audio.name || "site-note.webm", mimeType);
-        if (transcript.trim().length >= 3) {
-          return NextResponse.json({ ok: true, engine: "elevenlabs_scribe", transcript });
-        }
-        console.warn("[QuoteReady] Scribe transcript was empty/short, trying Gemini:", JSON.stringify(transcript));
-      } catch (error) {
-        console.warn("[QuoteReady] Scribe transcription failed, trying Gemini:", (error as Error).message);
-      }
-    }
-
-    // 2. Gemini multimodal audio fallback
-    if (GEMINI_CONFIGURED) {
-      try {
-        const transcript = await transcribeSiteNote({ mimeType, base64: buffer.toString("base64") });
-        return NextResponse.json({ ok: true, engine: "gemini", transcript });
-      } catch (error) {
-        if (error instanceof GeminiError && error.kind === "empty_response") {
-          return NextResponse.json(
-            { error: "The recording was silent or unreadable — try recording again." },
-            { status: 422 },
-          );
-        }
-        console.warn("[QuoteReady] Gemini transcription failed:", (error as Error).message);
-      }
-    }
-
-    return NextResponse.json(
-      { error: "Automatic transcription failed — type or paste the transcript instead." },
-      { status: 502 },
+    console.info(
+      `[QuoteReady] transcribing ${buffer.length} bytes of ${mimeType} with ElevenLabs Scribe`,
     );
+
+    try {
+      const transcript = await transcribeAudio(buffer, audio.name || "site-note.webm", mimeType);
+      if (transcript.trim().length < 3) {
+        return NextResponse.json(
+          { error: "No speech was detected in that recording — check the microphone and try again, or type the transcript." },
+          { status: 422 },
+        );
+      }
+      return NextResponse.json({ ok: true, engine: "elevenlabs_scribe", transcript });
+    } catch (error) {
+      // "Heard nothing" is a recording problem, not an outage — say so plainly
+      // so the operator checks their mic instead of retrying blindly.
+      if (error instanceof ElevenLabsError && error.kind === "no_speech") {
+        return NextResponse.json(
+          { error: "No speech was detected in that recording — check the microphone and try again, or type the transcript." },
+          { status: 422 },
+        );
+      }
+      console.warn("[QuoteReady] Scribe transcription failed:", (error as Error).message);
+      return NextResponse.json(
+        { error: "Automatic transcription failed — type or paste the transcript instead." },
+        { status: 502 },
+      );
+    }
   } catch (error) {
     console.error("[QuoteReady] transcribe failed:", error);
     return NextResponse.json(

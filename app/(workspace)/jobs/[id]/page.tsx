@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { store } from "@/lib/data/jobs";
 import { JobDetailView } from "@/components/jobs/job-detail-view";
+import { QuotePanel } from "@/components/quotes/quote-panel";
 import type { DraftRow, JobDetail } from "@/lib/data/types";
 import type { ScopePack } from "@/lib/ai/schemas";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
@@ -252,6 +253,8 @@ export default async function JobDetailPage({
   const photoEvidence = job.evidence.filter((e) => e.type === "photo_observation");
   const voiceEvidence = job.evidence.filter((e) => e.type === "voice_note");
   const lastVoice = voiceEvidence[voiceEvidence.length - 1];
+  // the most recent site note that has its recording saved (replayable)
+  const recordedVoice = [...voiceEvidence].reverse().find((e) => e.storage_path);
   const lastVoiceAudit = [...job.audit_events]
     .filter((a) => a.event_type === "voice_note_applied")
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
@@ -350,12 +353,31 @@ export default async function JobDetailPage({
           ? {
               transcript: lastVoice.claim,
               time: lastVoiceAudit ? clock(lastVoiceAudit.created_at) : clock(job.updated_at),
+              audioUrl: recordedVoice
+                ? `/api/jobs/${job.id}/voice-note/audio?evidence=${recordedVoice.id}`
+                : null,
             }
           : null
       }
       drafts={drafts}
       showAppliedBanner={applied === "1"}
       auditCount={job.audit_events.length}
+      quotePanel={
+        <QuotePanel
+          jobId={job.id}
+          customerName={job.customer.full_name}
+          status={job.status}
+          readinessScore={job.readiness_score}
+          readinessBand={scope?.readiness_band ?? null}
+          safetyFlag={job.safety_flag}
+          inspectionRecommended={scope?.inspection_recommended ?? false}
+          missingFields={(scope?.missing_fields ?? []).map((m) => ({
+            key: m.key,
+            label: m.label,
+            critical: m.critical,
+          }))}
+        />
+      }
     />
   );
 }

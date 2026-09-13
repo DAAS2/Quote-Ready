@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import { FollowUpModal } from "@/components/jobs/follow-up-modal";
@@ -71,10 +71,13 @@ interface DetailProps {
   }>;
   hasScope: boolean;
   inspectionRecommended: boolean;
-  voiceEvidence: { transcript: string; time: string } | null;
+  /** `audioUrl` points at the saved recording; null when only the transcript was stored */
+  voiceEvidence: { transcript: string; time: string; audioUrl: string | null } | null;
   drafts: DraftRow[];
   showAppliedBanner: boolean;
   auditCount: number;
+  /** server-rendered quote panel, slotted into the left column */
+  quotePanel?: ReactNode;
 }
 
 const READINESS_CIRCUMFERENCE = 113.1;
@@ -89,6 +92,18 @@ export function JobDetailView(props: DetailProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [showWhy, setShowWhy] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  /** Replay the saved field recording (the ElevenLabs-transcribed site note). */
+  function toggleVoicePlayback() {
+    const audio = voiceAudioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      void audio.play().catch(() => toast.error("Could not play the saved recording."));
+    } else {
+      audio.pause();
+    }
+  }
 
   const isV2 = (props.scopeVersion ?? 1) >= 2 && props.versions.length >= 2;
 
@@ -467,9 +482,23 @@ export function JobDetailView(props: DetailProps) {
                     </div>
                     {/* Waveform Visualizer & Playback Mock */}
                     <div className="flex items-center gap-space-md bg-surface-container-lowest p-3 rounded-lg shadow-sm">
+                      {props.voiceEvidence.audioUrl && (
+                        <audio
+                          className="hidden"
+                          onEnded={() => setPlaying(false)}
+                          onPause={() => setPlaying(false)}
+                          onPlay={() => setPlaying(true)}
+                          preload="none"
+                          ref={voiceAudioRef}
+                          src={props.voiceEvidence.audioUrl}
+                        />
+                      )}
                       <button
-                        className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity shrink-0"
-                        onClick={() => setPlaying((p) => !p)}
+                        aria-label={playing ? "Pause the saved site note" : "Replay the saved site note"}
+                        className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={!props.voiceEvidence.audioUrl}
+                        onClick={toggleVoicePlayback}
+                        title={props.voiceEvidence.audioUrl ? "Replay the saved recording" : "No saved audio for this note"}
                         type="button"
                       >
                         <span className="material-symbols-outlined text-[18px]">
@@ -968,6 +997,8 @@ export function JobDetailView(props: DetailProps) {
               )}
             </>
           )}
+
+          {props.quotePanel}
         </div>
 
         {/* RIGHT COLUMN */}
