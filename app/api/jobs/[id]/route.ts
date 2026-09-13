@@ -109,6 +109,28 @@ export async function PATCH(
   }
 }
 
+/**
+ * DELETE /api/jobs/[id]
+ * Remove an enquiry (its evidence, audits, scope versions and drafts go with it).
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const job = await store.getJob(id);
+    if (!job) {
+      return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    }
+    await store.deleteJob(id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[QuoteReady] delete job failed:", error);
+    return NextResponse.json({ error: "Could not delete the enquiry." }, { status: 500 });
+  }
+}
+
 async function storeImage(buffer: Buffer, mimeType: string): Promise<string> {
   const db = getServerSupabase();
   if (db) {

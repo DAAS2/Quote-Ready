@@ -111,6 +111,25 @@ export function JobDetailView(props: DetailProps) {
 
   const isV2 = (props.scopeVersion ?? 1) >= 2 && props.versions.length >= 2;
 
+  async function deleteEnquiry() {
+    const confirmed = window.confirm(
+      "Delete this enquiry? Its photos, voice notes, scope versions and drafts are removed permanently.",
+    );
+    if (!confirmed) return;
+    setBusy("delete");
+    try {
+      const res = await fetch(`/api/jobs/${props.jobId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not delete the enquiry.");
+      toast.success("Enquiry deleted.");
+      router.push("/jobs");
+      router.refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+      setBusy(null);
+    }
+  }
+
   async function approveScope() {
     setBusy("approve");
     try {
@@ -989,6 +1008,24 @@ export function JobDetailView(props: DetailProps) {
               it sits in a static children array with the other cards */}
           {props.quotePanel && <Fragment key="quote-panel">{props.quotePanel}</Fragment>}
 
+          {/* Destructive action — kept at the very bottom, away from daily flow */}
+          <div className="flex items-center justify-between gap-space-md rounded-xl border border-error/20 bg-error/5 p-space-md">
+            <div className="flex flex-col min-w-0">
+              <span className="font-label-lg text-label-lg text-on-surface">Delete this enquiry</span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">
+                Removes the enquiry with its evidence, scope versions and drafts. This cannot be undone.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={deleteEnquiry}
+              disabled={busy === "delete"}
+              className="shrink-0 h-10 px-4 rounded-lg border border-error/40 text-error font-label-lg text-label-lg flex items-center gap-2 hover:bg-error/10 transition-colors disabled:opacity-60"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+              <span>{busy === "delete" ? "Deleting…" : "Delete"}</span>
+            </button>
+          </div>
         </div>
 
         {/* RIGHT COLUMN */}

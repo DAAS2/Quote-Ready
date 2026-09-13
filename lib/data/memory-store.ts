@@ -439,6 +439,13 @@ export class MemoryStore implements Store {
     quotes.delete(id);
   }
 
+  async deleteJob(id: string): Promise<void> {
+    jobs.delete(id);
+    for (const [quoteId, quote] of quotes) {
+      if (quote.job_id === id) quotes.delete(quoteId);
+    }
+  }
+
   async listQuoteNumbers(): Promise<string[]> {
     return [...quotes.values()].map((q) => q.quote_number);
   }

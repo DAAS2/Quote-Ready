@@ -281,6 +281,37 @@ export class SupabaseStore implements Store {
     if (error) throw error;
   }
 
+  async deleteJob(id: string): Promise<void> {
+    const org = await this.org();
+    // remember the customer so we can tidy it up once the job is gone
+    const { data } = await this.db
+      .from("jobs")
+      .select("customer_id")
+      .eq("id", id)
+      .eq("organisation_id", org)
+      .maybeSingle();
+
+    const { error } = await this.db
+      .from("jobs")
+      .delete()
+      .eq("id", id)
+      .eq("organisation_id", org);
+    if (error) throw error;
+
+    // evidence, audits, drafts, scopes and quotes cascade off the job row.
+    // The customer is only removed if no other enquiry still points at it.
+    const customerId = data?.customer_id as string | null | undefined;
+    if (customerId) {
+      const { count } = await this.db
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("customer_id", customerId);
+      if ((count ?? 0) === 0) {
+        await this.db.from("customers").delete().eq("id", customerId).eq("organisation_id", org);
+      }
+    }
+  }
+
   async setJobStatus(jobId: string, status: JobStatus): Promise<void> {
     const { error } = await this.db
       .from("jobs")

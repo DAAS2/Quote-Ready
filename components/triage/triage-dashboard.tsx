@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import type { TriageRow } from "@/lib/ui/triage";
 import { displayRef } from "@/lib/ui/triage";
@@ -43,6 +44,24 @@ export function TriageDashboard({
     "attention",
   );
   const [page, setPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  /** Remove an enquiry straight from the list. */
+  async function removeRow(id: string, name: string) {
+    if (!window.confirm(`Delete the enquiry from ${name}? This cannot be undone.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not delete the enquiry.");
+      toast.success("Enquiry deleted.");
+      router.refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(voiceJobId);
@@ -493,16 +512,30 @@ export function TriageDashboard({
                     {row.updatedAt}
                   </td>
                   <td className="py-4 px-5 align-top text-right whitespace-nowrap">
-                    <Link
-                      href={`/jobs/${row.id}`}
-                      className={cn(
-                        "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md transition-all",
-                        row.actionButton,
-                      )}
-                    >
-                      <span className="hidden sm:inline">Review scope</span>
-                      <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                    </Link>
+                    <div className="inline-flex items-center gap-1.5">
+                      <Link
+                        href={`/jobs/${row.id}`}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md transition-all",
+                          row.actionButton,
+                        )}
+                      >
+                        <span className="hidden sm:inline">Review scope</span>
+                        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(row.id, row.name)}
+                        disabled={deletingId === row.id}
+                        aria-label={`Delete enquiry from ${row.name}`}
+                        title="Delete enquiry"
+                        className="w-8 h-8 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 flex items-center justify-center transition-colors disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {deletingId === row.id ? "progress_activity" : "delete"}
+                        </span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

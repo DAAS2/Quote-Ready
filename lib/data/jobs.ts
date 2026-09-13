@@ -116,6 +116,7 @@ export const store = {
     withFallback((s) => s.updateJobFacts(...args)),
   updateEnquiryText: (id: string, enquiryText: string) =>
     withFallback((s) => s.updateEnquiryText(id, enquiryText)),
+  deleteJob: (id: string) => withFallback((s) => s.deleteJob(id)),
   addEvidence: (...args: Parameters<Store["addEvidence"]>) =>
     withFallback((s) => s.addEvidence(...args)),
   setJobStatus: (...args: Parameters<Store["setJobStatus"]>) =>
