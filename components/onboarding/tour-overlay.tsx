@@ -49,6 +49,10 @@ export function TourOverlay() {
   // Pick up a pending tour request (set by signup / settings). The event lets
   // an already-mounted overlay restart the tour when replayed from Settings.
   useEffect(() => {
+    // Starting the tour here is a reaction to an external signal (a pending flag
+    // written by signup/settings before mount), not derived render state — the
+    // one-tick-late state update is the intended behaviour, not a cascade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isTourPending()) begin();
     const onRequest = () => begin();
     window.addEventListener(TOUR_REQUEST_EVENT, onRequest);
@@ -111,6 +115,9 @@ export function TourOverlay() {
   useEffect(() => {
     if (!active) return;
     if (!step.target) {
+      // Clearing the highlight for a target-less step: these setters describe
+      // the absence of a DOM target the effect is measuring against.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRect(null);
       setMissing(false);
       return;

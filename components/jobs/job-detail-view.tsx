@@ -75,6 +75,26 @@ interface DetailProps {
   }>;
   hasScope: boolean;
   inspectionRecommended: boolean;
+  /** cited service playbook notes retrieved for this job's facts */
+  guidance: Array<{
+    id: string;
+    title: string;
+    body: string;
+    source: string;
+    reference: string;
+    score: number;
+    matched_on: string[];
+  }>;
+  retrievalMode: "vector" | "lexical" | "skipped";
+  /** latency + token accounting for the run that produced this version */
+  analysisMetrics: {
+    model: string | null;
+    duration_ms: number;
+    total_tokens: number;
+    estimated_cost_usd: number;
+    cost_basis: string;
+    retrieval: { mode: string; notes: number; ms: number };
+  } | null;
   /** `audioUrl` points at the saved recording; null when only the transcript was stored */
   voiceEvidence: { transcript: string; time: string; audioUrl: string | null } | null;
   drafts: DraftRow[];
@@ -1416,6 +1436,88 @@ export function JobDetailView(props: DetailProps) {
                 </article>
               )}
             </>
+          )}
+
+          {/* Service guidance — retrieved from the curated playbook, always cited */}
+          {props.guidance.length > 0 && (
+            <article className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="font-label-sm text-label-sm text-primary uppercase tracking-wider font-bold">
+                    Service guidance
+                  </span>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    Matched from the service playbook
+                  </h3>
+                </div>
+                <span className="font-data-mono text-label-sm text-on-surface-variant px-2 py-1 rounded-full bg-surface-container-low">
+                  {props.retrievalMode === "vector" ? "vector match" : "keyword match"} ·{" "}
+                  {props.guidance.length} notes
+                </span>
+              </div>
+              <ul className="flex flex-col gap-3">
+                {props.guidance.map((note) => (
+                  <li
+                    key={note.id}
+                    className="flex flex-col gap-1.5 p-3 rounded-lg bg-surface-container-low"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="font-body-md text-body-md text-on-surface font-semibold">
+                        {note.title}
+                      </span>
+                      <span className="font-data-mono text-[11px] text-on-surface-variant shrink-0 mt-0.5">
+                        {note.reference}
+                      </span>
+                    </div>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                      {note.body}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {note.matched_on.slice(0, 3).map((tag) => (
+                        <span
+                          key={tag}
+                          className="font-data-mono text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant"
+                        >
+                          {tag.replace(/_/g, " ")}
+                        </span>
+                      ))}
+                      <span className="font-label-sm text-[11px] text-on-surface-variant">
+                        {note.source} · match {Math.round(note.score * 100)}%
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="font-label-sm text-label-sm text-on-surface-variant">
+                Reference only. This guidance shapes what to ask or check next — the readiness
+                score, the band and the safety routing are decided by the rules engine.
+              </p>
+            </article>
+          )}
+
+          {/* Analysis run telemetry — what a run cost, in time and tokens */}
+          {props.analysisMetrics && (
+            <article
+              className="bg-surface-container-low rounded-xl p-space-md flex flex-wrap items-center gap-x-4 gap-y-1"
+              title={props.analysisMetrics.cost_basis}
+            >
+              <span className="material-symbols-outlined text-primary text-[18px]">monitoring</span>
+              <span className="font-data-mono text-label-sm text-on-surface-variant">
+                Analysed in {(props.analysisMetrics.duration_ms / 1000).toFixed(1)}s ·{" "}
+                {props.analysisMetrics.total_tokens} tokens · est. $
+                {props.analysisMetrics.estimated_cost_usd.toFixed(4)}
+                {props.analysisMetrics.model ? ` · ${props.analysisMetrics.model}` : ""}
+              </span>
+              <span className="font-label-sm text-[11px] text-on-surface-variant">
+                retrieval:{" "}
+                {props.analysisMetrics.retrieval.mode === "vector"
+                  ? "vector"
+                  : props.analysisMetrics.retrieval.mode === "lexical"
+                    ? "keyword"
+                    : "n/a"}{" "}
+                · {props.analysisMetrics.retrieval.ms} ms
+              </span>
+            </article>
           )}
 
           {/* Trust / Guardrail Card (shared) */}

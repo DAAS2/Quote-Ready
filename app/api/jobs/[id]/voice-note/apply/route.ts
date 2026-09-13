@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { buildVoicePreview } from "@/lib/ai/voice";
+import { retrieveServiceGuidance } from "@/lib/ai/retrieval";
 import { VoiceUpdateSchema } from "@/lib/ai/schemas";
 import { resolveJobTemplate } from "@/lib/rules/template-resolve";
 
@@ -74,7 +75,18 @@ export async function POST(
     const template = await resolveJobTemplate(store, job).catch(() => undefined);
     const { newPack } = buildVoicePreview(job, transcript, update, template);
 
-    await store.updateJobFacts(id, newPack.facts, newPack, []);
+    // Retrieval re-runs against the MERGED facts, not the old ones: a field note
+    // can change which playbook guidance applies to the job, and that change is
+    // part of what the operator reviews on the new version.
+    const guidance = await retrieveServiceGuidance({
+      job_type: newPack.job_type,
+      facts: newPack.facts,
+      risk_flags: newPack.risk_flags.map((f) => f.id),
+      missing_fields: newPack.missing_fields.map((m) => m.key),
+    });
+    const pack = { ...newPack, guidance: guidance.notes };
+
+    await store.updateJobFacts(id, pack.facts, pack, []);
 
     // Persist the recording (when one was sent) so the voicenote is replayable.
     const storagePath = audio ? await storeVoiceNote(id, audio) : null;
@@ -93,20 +105,23 @@ export async function POST(
     await store.addAudit(id, {
       actor_type: "user",
       event_type: "voice_note_applied",
-      summary: `Site note applied — new scope v${newPack.version} (${newPack.readiness_score}%, ${newPack.readiness_band.replace(/_/g, " ")}).`,
+      summary: `Site note applied — new scope v${pack.version} (${pack.readiness_score}%, ${pack.readiness_band.replace(/_/g, " ")}).`,
       metadata: {
-        version: newPack.version,
+        version: pack.version,
         transcription: "applied",
         audio_stored: Boolean(storagePath),
         update_notes: update.notes,
+        retrieval_mode: guidance.mode,
+        guidance: guidance.notes.map((g) => ({ id: g.id, reference: g.reference, score: g.score })),
       },
     });
 
     return NextResponse.json({
       ok: true,
-      scope: newPack,
-      status: newPack.status,
+      scope: pack,
+      status: pack.status,
       audio_stored: Boolean(storagePath),
+      guidance_mode: guidance.mode,
     });
   } catch (error) {
     console.error("[QuoteReady] voice-note apply failed:", error);

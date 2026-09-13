@@ -75,13 +75,6 @@ export function readinessTone(score: number | null | undefined): Tone {
   return "primary";
 }
 
-const TONE_TEXT: Record<Tone, string> = {
-  primary: "text-primary",
-  secondary: "text-secondary",
-  error: "text-error",
-  neutral: "text-on-surface-variant",
-};
-
 const TONE_BAR: Record<Tone, string> = {
   primary: "bg-primary",
   secondary: "bg-secondary",

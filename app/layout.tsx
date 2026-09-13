@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-page-custom-font -- App Router: the root layout is
+   the correct place for stylesheet links (there is no pages/_document here). */
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Manrope } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
@@ -53,7 +55,7 @@ export default function RootLayout({
       <link
         rel="stylesheet"
         precedence="default"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
       />
       <body className="bg-surface font-body-md text-body-md text-on-surface">
         {children}

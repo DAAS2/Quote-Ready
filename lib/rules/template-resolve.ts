@@ -7,6 +7,17 @@ import type { Store, TemplateRow } from "@/lib/data/types";
  * its built-in base template, then pick the right template for a job.
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Coerce an untrusted list into ≤12 trimmed, non-empty strings.
+ */
+function textList(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((s): s is string => typeof s === "string")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 12);
+}
+
 /** Merge a stored document over the built-in base template. */
 export function materialiseTemplate(row: TemplateRow): JobTemplate {
   const base = JOB_TEMPLATES[row.base_type];
@@ -71,14 +82,10 @@ export function normaliseTemplateDocument(input: unknown): JobTemplate {
           .map(([k, v]) => [k, String(v).slice(0, 300)]),
       )
       : {},
-    assumptions: (Array.isArray(raw.assumptions) ? raw.assumptions : [])
-      .map(String)
-      .filter((s) => s.trim().length > 0)
-      .slice(0, 12),
-    exclusions: (Array.isArray(raw.exclusions) ? raw.exclusions : [])
-      .map(String)
-      .filter((s) => s.trim().length > 0)
-      .slice(0, 12),
+    // Text lists only: drop non-strings and normalise whitespace so stored
+    // documents cannot smuggle empty or padded lines into a customer document.
+    assumptions: textList(raw.assumptions),
+    exclusions: textList(raw.exclusions),
     inspection_conditions,
     min_photos_for_good_evidence: Math.max(0, Math.min(6, Number(raw.min_photos_for_good_evidence) || 2)),
     message_guidance: String(raw.message_guidance ?? "").slice(0, 400),

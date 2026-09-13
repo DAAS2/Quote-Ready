@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JobFacts, ScopePack } from "@/lib/ai/schemas";
+import type { ScopePack } from "@/lib/ai/schemas";
 import type { ScopePackInput } from "@/lib/rules/engine";
 import { buildScopePack } from "@/lib/rules/engine";
 import { mergeFacts } from "@/lib/rules/merge";
@@ -8,14 +8,12 @@ import { buildMessageDraft } from "@/lib/rules/message-templates";
 import {
   ENQUIRY_TEXT_HOTWATER,
   ENQUIRY_TEXT_TAP,
-  ENQUIRY_TEXT_TOILET,
   FIXTURE_A,
-  FIXTURE_B,
   FIXTURE_TAP_COMPLETE,
   VOICE_NOTE_TAP,
   facts,
   EVALUATION_FIXTURES,
-} from "./fixtures/scopes";
+} from "@/lib/evaluation/fixtures";
 
 const baseInput = (over: Partial<ScopePackInput>): ScopePackInput =>
   ({

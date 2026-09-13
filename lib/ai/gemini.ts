@@ -5,6 +5,7 @@ import {
   IntakeExtractionSchema,
   VoiceUpdateSchema,
   type GeminiAnalysis,
+  type GuidanceNote,
   type IntakeExtraction,
   type ScopePack,
   type VoiceUpdate,
@@ -12,7 +13,6 @@ import {
 import {
   EXTRACTION_SYSTEM_PROMPT,
   VOICE_UPDATE_SYSTEM_PROMPT,
-  SITE_NOTE_TRANSCRIPTION_PROMPT,
   INTAKE_FIELD_SYSTEM_PROMPT,
   buildExtractionUserPrompt,
   buildVoiceUpdateUserPrompt,
@@ -53,12 +53,38 @@ function getClient(): GoogleGenAI {
 
 const MODEL = "gemini-3.6-flash";
 
+/** Token accounting for a single model call (surfaced in scope metrics). */
+export interface ModelUsage {
+  model: string;
+  prompt_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+function usageOf(response: { usageMetadata?: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+} }): ModelUsage {
+  const meta = response.usageMetadata;
+  const prompt = meta?.promptTokenCount ?? 0;
+  const output = meta?.candidatesTokenCount ?? 0;
+  return {
+    model: MODEL,
+    prompt_tokens: prompt,
+    output_tokens: output,
+    total_tokens: meta?.totalTokenCount ?? prompt + output,
+  };
+}
+
+export const GEMINI_MODEL = MODEL;
+
 export async function extractJobFacts(input: {
   enquiry_text: string;
   job_type: GeminiAnalysis["job_type"] | null;
   customer_suburb?: string | null;
   images: ModelImage[];
-}): Promise<GeminiAnalysis> {
+}): Promise<{ analysis: GeminiAnalysis; usage: ModelUsage }> {
   const ai = getClient();
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
     { text: buildExtractionUserPrompt({ ...input, photo_count: input.images.length }) },
@@ -71,6 +97,7 @@ export async function extractJobFacts(input: {
   });
 
   let text: string | undefined;
+  let usage: ModelUsage = { model: MODEL, prompt_tokens: 0, output_tokens: 0, total_tokens: 0 };
   try {
     const response = await ai.models.generateContent({
       model: MODEL,
@@ -83,6 +110,7 @@ export async function extractJobFacts(input: {
       },
     });
     text = response.text;
+    usage = usageOf(response);
   } catch (error) {
     throw new GeminiError(
       `Gemini API call failed: ${(error as Error).message}`,
@@ -114,7 +142,7 @@ export async function extractJobFacts(input: {
       "schema",
     );
   }
-  return parsed.data;
+  return { analysis: parsed.data, usage };
 }
 
 /** Tolerate accidental markdown fences around the JSON. */
@@ -165,42 +193,12 @@ export function tryExtractJsonObject(text: string): unknown | undefined {
   return undefined;
 }
 
-/* ── Audio transcription (recorded site note → verbatim transcript) ──────── */
-
-export async function transcribeSiteNote(input: {
-  mimeType: string;
-  base64: string;
-}): Promise<string> {
-  const ai = getClient();
-
-  let text: string | undefined;
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: SITE_NOTE_TRANSCRIPTION_PROMPT },
-            { inlineData: { mimeType: input.mimeType, data: input.base64 } },
-          ],
-        },
-      ],
-      config: {
-        temperature: 0,
-        maxOutputTokens: 1024,
-      },
-    });
-    text = response.text;
-  } catch (error) {
-    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
-  }
-
-  if (!text || text.trim() === "") {
-    throw new GeminiError("Gemini returned an empty response", "empty_response");
-  }
-  return text.trim();
-}
+/*
+ * Speech-to-text deliberately does NOT live here. Field notes are transcribed
+ * by ElevenLabs Scribe only (lib/elevenlabs/client.ts) — one transcription
+ * provider, so "the voice workflow depends on ElevenLabs" stays literally true
+ * and there is no second, divergent transcript path to reconcile.
+ */
 
 /* ── Voice-intake: transcript → new-enquiry form fields ──────────────────── */
 
@@ -297,17 +295,24 @@ const RecommendationSchema = z.object({
   rationale: z.string().min(1).max(600),
 });
 
-export async function writeRecommendation(scope: ScopePack): Promise<{
+export async function writeRecommendation(
+  scope: ScopePack,
+  guidance: GuidanceNote[] = [],
+): Promise<{
   title: string;
   rationale: string;
+  usage: ModelUsage;
 }> {
   const ai = getClient();
 
   let text: string | undefined;
+  let usage: ModelUsage = { model: MODEL, prompt_tokens: 0, output_tokens: 0, total_tokens: 0 };
   try {
     const response = await ai.models.generateContent({
       model: MODEL,
-      contents: [{ role: "user", parts: [{ text: buildRecommendationUserPrompt(scope) }] }],
+      contents: [
+        { role: "user", parts: [{ text: buildRecommendationUserPrompt(scope, guidance) }] },
+      ],
       config: {
         systemInstruction: RECOMMENDATION_SYSTEM_PROMPT,
         responseMimeType: "application/json",
@@ -316,6 +321,7 @@ export async function writeRecommendation(scope: ScopePack): Promise<{
       },
     });
     text = response.text;
+    usage = usageOf(response);
   } catch (error) {
     throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
   }
@@ -338,5 +344,5 @@ export async function writeRecommendation(scope: ScopePack): Promise<{
       "schema",
     );
   }
-  return parsed.data;
+  return { ...parsed.data, usage };
 }

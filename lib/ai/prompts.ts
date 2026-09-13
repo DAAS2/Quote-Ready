@@ -1,4 +1,4 @@
-import type { JobType, ScopePack } from "./schemas";
+import type { GuidanceNote, JobType, ScopePack } from "./schemas";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Gemini prompts. Rules of the house:
@@ -123,13 +123,11 @@ export function buildIntakeFieldUserPrompt(transcript: string): string {
   return `SPOKEN ENQUIRY TRANSCRIPT:\n"${transcript}"`;
 }
 
-export const SITE_NOTE_TRANSCRIPTION_PROMPT = `Transcribe this spoken plumbing site note verbatim, in Australian English.
-
-Rules:
-1. Output ONLY the transcript text — no headers, no commentary, no quotation marks.
-2. Keep the speaker's own words. Do not summarise, correct or interpret.
-3. Use proper punctuation and sentence casing so the note reads clearly.
-4. Trade terms heard in the audio (mixer, cartridge, mini-stop, isolation valve, S-trap, braided hose) must be spelled exactly like that.`;
+/*
+ * Note: there is no transcription prompt here. Site notes are transcribed by
+ * ElevenLabs Scribe (lib/elevenlabs/client.ts); Gemini only ever reads a
+ * transcript that already exists.
+ */
 
 export const BRIEFING_PROMPT = (summary: string) =>
   `You are QuoteReady's pre-call assistant. Compose a SHORT spoken briefing (4-6 sentences, plain language, no jargon, no prices) from this job state. Mention the customer's name, the readiness status, the top 1-3 things to ask or check, and the recommended next step. Do not diagnose or give safety advice; if there is a safety flag, say "this one needs safety attention" and stop.\n\nJOB STATE:\n${summary}`;
@@ -143,7 +141,8 @@ Rules:
 2. Titles: short, imperative, plain language ("Send the customer the follow-up questions", "Book a site inspection", "Review the scope and quote", "Escalate to safety process").
 3. Rationale: 2-3 sentences, first-person-plural friendly ("We still need…"), grounded ONLY in the scope pack's missing fields, risk flags, assumptions and readiness components.
 4. If safety is flagged, lead with the safety concern and keep it to one sentence — safety language wins over everything.
-5. Return ONLY valid JSON: { "title": string, "rationale": string }.`;
+5. RETRIEVED SERVICE GUIDANCE: when supplied, it is BACKGROUND READING for wording only — what to ask or check next. It is not a finding about this job. Never let it change the action type, add a risk, or contradict a missing field, and never refer to it by reference number.
+6. Return ONLY valid JSON: { "title": string, "rationale": string }.`;
 
 /* ── Quote content drafting (docx-quote skill) ───────────────────────────── */
 
@@ -231,7 +230,10 @@ export function buildQuoteUserPrompt(input: {
   ].join("\n\n");
 }
 
-export function buildRecommendationUserPrompt(scope: ScopePack): string {
+export function buildRecommendationUserPrompt(
+  scope: ScopePack,
+  guidance: GuidanceNote[] = [],
+): string {
   return [
     `Write the operator-facing recommendation for this job scope.`,
     ``,
@@ -253,5 +255,13 @@ export function buildRecommendationUserPrompt(scope: ScopePack): string {
       null,
       2,
     ),
+    ``,
+    guidance.length > 0
+      ? [
+          `RETRIEVED SERVICE GUIDANCE (background only — these notes were matched to this job's facts):`,
+          ...guidance.map((g) => `- ${g.title}: ${g.body}`),
+          `You may use these to make the rationale more specific about what to ask or check. Do not quote them, do not cite them, do not treat them as findings.`,
+        ].join("\n")
+      : `NO SERVICE GUIDANCE WAS RETRIEVED — write the rationale from the scope pack alone.`,
   ].join("\n");
 }
