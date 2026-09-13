@@ -164,9 +164,11 @@ export default async function MessagesPage() {
             {new Set(messages.map((m) => m.job.id)).size} job
             {new Set(messages.map((m) => m.job.id)).size === 1 ? "" : "s"}
           </span>
-          <span className="font-data-mono text-label-sm">
-            Job refs: {displayRef(messages[0]?.job.id ?? "demo")}
-          </span>
+          {messages.length > 0 && (
+            <span className="font-data-mono text-label-sm">
+              Job refs: {displayRef(messages[0]!.job.id)}
+            </span>
+          )}
         </div>
       </div>
 
