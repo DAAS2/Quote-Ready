@@ -6,9 +6,11 @@ import type { VoiceUpdate } from "@/lib/ai/schemas";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * "Add a site note" modal — transcribed 1:1 from the record-site-note design.
- * Flow: record (timer + real capture) → transcript (live browser speech-to-
- * text, with automatic Gemini audio transcription as the fallback) →
- * extraction preview → user-approved apply (POST voice-note/apply).
+ * Flow: record (timer + real capture) → ElevenLabs Scribe transcription
+ * (server-side, the only speech-to-text engine) → replay the captured
+ * voicenote → Gemini extraction preview → user-approved apply
+ * (POST voice-note/apply). The recording is saved with the applied note so it
+ * can be replayed later from the job's evidence card.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 interface ExtractedUpdates {
@@ -18,40 +20,8 @@ interface ExtractedUpdates {
   recommendation?: { title: string; sub: string; tone: "amber" | "teal" };
 }
 
-/* Web Speech API typings (browser-specific, not in lib.dom everywhere) */
-interface SpeechResultAlternative {
-  transcript: string;
-}
-interface SpeechResult {
-  isFinal: boolean;
-  0: SpeechResultAlternative;
-  length: number;
-}
-interface SpeechEventLike {
-  resultIndex: number;
-  results: { length: number; [index: number]: SpeechResult };
-}
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechEventLike) => void) | null;
-  onerror: ((event: unknown) => void) | null;
-  onend: (() => void) | null;
-}
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognition(): SpeechRecognitionCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
+/* MediaRecorder mime types vary by browser (webm/opus, mp4/aac) */
+const FALLBACK_MIME = "audio/webm";
 
 const WAVEFORM_BARS = [
   "bg-teal-400 h-3", "bg-teal-500 h-5", "bg-teal-600 h-8", "bg-teal-700 h-10",
@@ -67,12 +37,21 @@ function fmt(seconds: number): string {
   return `${m}:${s}`;
 }
 
+interface PreparedAudio {
+  /** 16 kHz mono PCM WAV, silence-trimmed */
+  blob: Blob;
+  /** peak amplitude 0–1 of the source recording (≈0 means the mic heard nothing) */
+  peak: number;
+  /** seconds of audio actually sent */
+  seconds: number;
+}
+
 /**
  * Convert a MediaRecorder blob into 16 kHz mono PCM WAV with leading/trailing
- * silence trimmed — far more reliable for speech-to-text than the raw webm
- * (which some engines misread, returning empty transcripts).
+ * silence trimmed — far more reliable for speech-to-text than the raw webm.
+ * Returns null when the recording has no usable signal at all.
  */
-async function blobToWav(blob: Blob): Promise<Blob | null> {
+async function prepareAudio(blob: Blob): Promise<PreparedAudio | null> {
   try {
     const AudioCtx =
       window.AudioContext ??
@@ -83,6 +62,13 @@ async function blobToWav(blob: Blob): Promise<Blob | null> {
     const srcRate = decoded.sampleRate;
     const rate = Math.min(srcRate, 16000);
     const src = decoded.getChannelData(0);
+
+    // peak level of the raw capture — 0 means the mic produced silence
+    let peak = 0;
+    for (let i = 0; i < src.length; i++) {
+      const a = Math.abs(src[i]!);
+      if (a > peak) peak = a;
+    }
 
     // resample (linear)
     const count = Math.floor((src.length * rate) / srcRate);
@@ -130,7 +116,11 @@ async function blobToWav(blob: Blob): Promise<Blob | null> {
       view.setInt16(44 + i * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
     }
     void ctx.close();
-    return new Blob([buffer], { type: "audio/wav" });
+    return {
+      blob: new Blob([buffer], { type: "audio/wav" }),
+      peak,
+      seconds: trimmed.length / rate,
+    };
   } catch {
     return null;
   }
@@ -157,6 +147,8 @@ export function RecordSiteNoteModal({
   const [update, setUpdate] = useState<VoiceUpdate | null>(null);
   const [applying, setApplying] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  /** live input level 0–1 while recording, so a dead mic is obvious */
+  const [micLevel, setMicLevel] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -164,8 +156,13 @@ export function RecordSiteNoteModal({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const speechTextRef = useRef("");
+  /** the captured recording, kept so it can be persisted with the applied note */
+  const recordedBlobRef = useRef<Blob | null>(null);
+  const recordedMimeRef = useRef<string>(FALLBACK_MIME);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const levelRafRef = useRef<number | null>(null);
+  const peakLevelRef = useRef(0);
 
   const stopTimer = () => {
     if (timerRef.current) {
@@ -234,34 +231,90 @@ export function RecordSiteNoteModal({
   useEffect(
     () => () => {
       stopTimer();
+      stopLevelMeter();
       streamRef.current?.getTracks().forEach((t) => t.stop());
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        /* already ended */
-      }
     },
     [],
   );
 
-  /** Automatic transcription of the recorded blob (server-side Scribe/Gemini). */
+  /** Live input level so a muted or wrong-device mic is visible immediately. */
+  function startLevelMeter(stream: MediaStream) {
+    try {
+      const AudioCtx =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+      peakLevelRef.current = 0;
+      const data = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        if (!analyserRef.current) return;
+        analyser.getByteTimeDomainData(data);
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) {
+          const a = Math.abs(data[i]! - 128) / 128;
+          if (a > peak) peak = a;
+        }
+        peakLevelRef.current = Math.max(peakLevelRef.current, peak);
+        setMicLevel(peak);
+        levelRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      /* level meter is best-effort — recording still works without it */
+    }
+  }
+
+  function stopLevelMeter() {
+    if (levelRafRef.current !== null) cancelAnimationFrame(levelRafRef.current);
+    levelRafRef.current = null;
+    analyserRef.current = null;
+    void audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    setMicLevel(0);
+  }
+
+  /**
+   * Send the recording to ElevenLabs Scribe (server-side). Tries a cleaned
+   * 16 kHz WAV first, then the untouched recording — Scribe occasionally hears
+   * nothing in a re-encode. A "no speech" reply is reported as exactly that.
+   */
   async function transcribeOnServer(rawBlob: Blob) {
     setTranscribing(true);
     try {
-      // prefer a cleaned 16 kHz WAV — raw MediaRecorder webm sometimes yields
-      // empty transcripts from the speech engines
-      const wav = await blobToWav(rawBlob);
-      const payload = wav ?? rawBlob;
-      const ext = wav ? "wav" : "webm";
-      const form = new FormData();
-      form.append("audio", payload, `site-note.${ext}`);
-      const res = await fetch(`/api/jobs/${jobId}/voice-note/transcribe`, {
-        method: "POST",
-        body: form,
+      const prepared = await prepareAudio(rawBlob);
+      const attempts: Array<{ payload: Blob; ext: string }> = [];
+      if (prepared) attempts.push({ payload: prepared.blob, ext: "wav" });
+      attempts.push({
+        payload: rawBlob,
+        ext: rawBlob.type.includes("mp4") ? "m4a" : "webm",
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Automatic transcription failed.");
-      setTranscript((data.transcript as string).trim());
+
+      let message =
+        "No speech was detected in that recording — check the microphone and try again, or type the transcript.";
+      for (const attempt of attempts) {
+        const form = new FormData();
+        form.append("audio", attempt.payload, `site-note.${attempt.ext}`);
+        const res = await fetch(`/api/jobs/${jobId}/voice-note/transcribe`, {
+          method: "POST",
+          body: form,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setTranscript(String(data.transcript ?? "").trim());
+          return;
+        }
+        message = (data.error as string) ?? message;
+        // only "heard nothing" is worth retrying with the original file
+        if (res.status !== 422) break;
+      }
+      toast.error(message);
+      textareaRef.current?.focus();
     } catch (error) {
       toast.error((error as Error).message);
       textareaRef.current?.focus();
@@ -273,60 +326,34 @@ export function RecordSiteNoteModal({
   function startRecording() {
     setPhase("recording");
     setSeconds(0);
-    speechTextRef.current = "";
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-    // live speech-to-text (Chromium browsers) — transcript fills as you speak
-    const SRCtor = getSpeechRecognition();
-    if (SRCtor) {
-      try {
-        const recognition = new SRCtor();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-AU";
-        recognition.onresult = (event) => {
-          let interim = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i]!;
-            if (result.isFinal) {
-              speechTextRef.current = `${speechTextRef.current} ${result[0].transcript.trim()}`.trim();
-            } else {
-              interim += result[0].transcript;
-            }
-          }
-          setTranscript(
-            `${speechTextRef.current}${interim ? ` ${interim}` : ""}`.trimStart(),
-          );
-        };
-        recognition.onerror = () => {
-          /* permission denied or no-input — the recorded blob is the fallback */
-        };
-        recognition.start();
-        recognitionRef.current = recognition;
-      } catch {
-        recognitionRef.current = null;
-      }
-    }
-
-    // real audio capture (used for playback preview + server transcription)
+    // audio capture — the blob is transcribed by ElevenLabs Scribe on stop
     try {
       navigator.mediaDevices
         ?.getUserMedia({ audio: true })
         .then((stream) => {
           streamRef.current = stream;
           chunksRef.current = [];
+          startLevelMeter(stream);
           const rec = new MediaRecorder(stream);
           rec.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
           };
           rec.onstop = () => {
-            const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+            const blob = new Blob(chunksRef.current, { type: rec.mimeType || FALLBACK_MIME });
+            recordedBlobRef.current = blob;
+            recordedMimeRef.current = rec.mimeType || FALLBACK_MIME;
             if (audioUrl) URL.revokeObjectURL(audioUrl);
             setAudioUrl(URL.createObjectURL(blob));
-            // nothing captured by the browser speech engine? transcribe the audio
-            if (speechTextRef.current.trim().length < 10) {
-              void transcribeOnServer(blob);
+            // The mic was effectively silent — surface it before Scribe has to
+            if (peakLevelRef.current < 0.02) {
+              toast.warning(
+                "The microphone captured almost no sound — check the selected input device.",
+              );
             }
+            // ElevenLabs Scribe is the only speech-to-text engine
+            void transcribeOnServer(blob);
           };
           rec.start();
           recorderRef.current = rec;
@@ -341,12 +368,7 @@ export function RecordSiteNoteModal({
 
   function stopRecording() {
     stopTimer();
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* already ended */
-    }
-    recognitionRef.current = null;
+    stopLevelMeter();
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -355,10 +377,12 @@ export function RecordSiteNoteModal({
 
   function reRecord() {
     stopTimer();
+    stopLevelMeter();
     setPhase("idle");
     setSeconds(0);
     setTranscript("");
-    speechTextRef.current = "";
+    recordedBlobRef.current = null;
+    peakLevelRef.current = 0;
     setUpdates(null);
     setUpdate(null);
     setFieldsReady(0);
@@ -386,11 +410,27 @@ export function RecordSiteNoteModal({
     }
     setApplying(true);
     try {
-      const res = await fetch(`/api/jobs/${jobId}/voice-note/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: transcript.trim(), update }),
-      });
+      // Send the recording alongside the approved update so the voicenote is
+      // stored and can be replayed later; pasted-text notes send JSON only.
+      const recorded = recordedBlobRef.current;
+      let res: Response;
+      if (recorded) {
+        const ext = recordedMimeRef.current.includes("mp4") ? "m4a" : "webm";
+        const form = new FormData();
+        form.append("transcript", transcript.trim());
+        form.append("update", JSON.stringify(update));
+        form.append("audio", recorded, `site-note.${ext}`);
+        res = await fetch(`/api/jobs/${jobId}/voice-note/apply`, {
+          method: "POST",
+          body: form,
+        });
+      } else {
+        res = await fetch(`/api/jobs/${jobId}/voice-note/apply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: transcript.trim(), update }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not apply the update.");
       toast.success(
@@ -480,6 +520,20 @@ export function RecordSiteNoteModal({
                     <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {fmt(seconds)}
                     </span>
+                    {phase === "recording" && (
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                          micLevel > 0.02
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-red-50 text-red-700 border-red-200"
+                        }`}
+                      >
+                        <span
+                          className={`w-2 h-2 rounded-full ${micLevel > 0.02 ? "bg-emerald-500" : "bg-red-500"}`}
+                        ></span>
+                        {micLevel > 0.02 ? "Mic level OK" : "No mic input"}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <span className="text-xs font-semibold text-slate-500">
@@ -493,15 +547,25 @@ export function RecordSiteNoteModal({
             </div>
             <div className="py-5 flex flex-col items-center justify-center">
               <div
-                aria-label="Audio waveform visualization"
+                aria-label="Live microphone level"
                 className="w-full max-w-md h-12 flex items-center justify-center gap-1 sm:gap-1.5 px-4 mb-4"
               >
-                {WAVEFORM_BARS.map((bar, i) => (
-                  <span
-                    key={i}
-                    className={`w-1 rounded-full ${bar} ${phase === "recording" ? "animate-pulse" : ""}`}
-                  ></span>
-                ))}
+                {WAVEFORM_BARS.map((bar, i) => {
+                  const [color, height] = bar.split(" ");
+                  const base = Number(height.replace("h-", "")) || 2;
+                  // while recording the bars track the real input level, so a
+                  // muted or wrong-device mic reads flat instead of looking alive
+                  const px = phase === "recording"
+                    ? Math.max(2, Math.min(12, base * (0.3 + micLevel * 7))) * 4
+                    : base * 4;
+                  return (
+                    <span
+                      key={i}
+                      className={`w-1 rounded-full ${color}`}
+                      style={{ height: `${px}px` }}
+                    ></span>
+                  );
+                })}
               </div>
               <div className="flex items-center justify-center gap-6">
                 <button
@@ -553,15 +617,15 @@ export function RecordSiteNoteModal({
                   <svg className="w-4 h-4 text-teal-700" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
-                  <span>Play preview</span>
+                  <span>Play recording</span>
                 </button>
               </div>
             </div>
             <div className="mt-2 text-center text-xs text-slate-500 bg-slate-50 rounded-lg p-2.5 border border-slate-100">
               <span className="font-medium text-slate-700">Tradie tip:</span> Mention fixture type,
-              isolation access, dampness, and whether physical testing is needed. Speech appears in
-              the transcript automatically — live while recording, or transcribed the moment you
-              press stop.
+              isolation access, dampness, and whether physical testing is needed. ElevenLabs Scribe
+              transcribes the recording the moment you press stop — replay it and edit the text
+              before applying.
             </div>
           </section>
 

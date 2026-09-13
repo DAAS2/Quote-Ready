@@ -71,7 +71,7 @@ readiness = 0.25·Details + 0.25·Evidence + 0.20·Access + 0.15·Confirmation +
 - **Next.js 16** (App Router, server components, Turbopack) + **shadcn/ui** + Tailwind v4
 - **LangGraph** (`@langchain/langgraph`) — explicit five-node analysis pipeline: `validate_input → extract_facts (Gemini) → validate_output → apply_rules_and_score → persist`
 - **Google Gemini 2.5 Flash** — one multimodal call per analysis; `responseMimeType: application/json`; Zod validation; retry-once then *honest fallback* (never fabricated facts)
-- **ElevenLabs** — Scribe STT for field notes, TTS for pre-call briefings (clearly labelled AI-generated)
+- **ElevenLabs** — the only voice provider: Scribe (`scribe_v1`) STT for field notes, TTS for pre-call briefings (clearly labelled AI-generated). Recordings are saved so a site note can be replayed.
 - **Supabase** — Postgres schema + Storage buckets; **full in-memory fallback store** mirrors the API so the demo never hard-fails (status chip shows which store is live)
 - **Vitest** — 42 tests, 95%+ coverage on the rules engine; the 10-fixture evaluation suite runs in CI *and* live at `/evaluation`
 
@@ -79,7 +79,7 @@ readiness = 0.25·Details + 0.25·Evidence + 0.20·Access + 0.15·Confirmation +
 app/
   (workspace)/            dashboard · jobs/[id] · jobs/new · evaluation · how-it-works
   api/jobs/               POST create · [id]/analyse · [id]/message-draft(/approve)
-                          [id]/voice-note(/apply) · [id]/inspect · [id]/briefing · demo/reset
+                          [id]/voice-note(/transcribe|/preview|/apply|/audio) · [id]/inspect · [id]/briefing · demo/reset
 lib/
   rules/                  engine · readiness · job-templates · overrides · diff · messages (pure TS)
   ai/                     gemini · prompts · schemas (Zod) · fallbacks · voice

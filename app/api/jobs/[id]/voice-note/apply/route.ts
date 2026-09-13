@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { buildVoicePreview } from "@/lib/ai/voice";
 import { VoiceUpdateSchema } from "@/lib/ai/schemas";
 import { resolveJobTemplate } from "@/lib/rules/template-resolve";
@@ -7,10 +8,15 @@ import { resolveJobTemplate } from "@/lib/rules/template-resolve";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+
 /**
  * User-applied voice update: merges the extracted update into the job,
  * re-runs the deterministic rules, and creates a new scope version.
- * Body: { transcript: string, update: VoiceUpdate }
+ *
+ * Body: JSON { transcript, update }
+ *   or multipart { transcript, update (JSON string), audio? } — the recorded
+ *   voicenote is stored in Supabase Storage so it can be replayed later.
  */
 export async function POST(
   request: Request,
@@ -23,12 +29,40 @@ export async function POST(
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }
 
-    const body = await request.json().catch(() => null);
-    const transcript = typeof body?.transcript === "string" ? body.transcript.trim().slice(0, 4000) : "";
+    const contentType = request.headers.get("content-type") ?? "";
+    let rawTranscript = "";
+    let rawUpdate: unknown = null;
+    let audio: File | null = null;
+
+    if (contentType.includes("multipart/form-data")) {
+      const form = await request.formData();
+      rawTranscript = typeof form.get("transcript") === "string" ? (form.get("transcript") as string) : "";
+      const updateField = form.get("update");
+      if (typeof updateField === "string") {
+        try {
+          rawUpdate = JSON.parse(updateField);
+        } catch {
+          return NextResponse.json({ error: "The extracted update could not be read." }, { status: 400 });
+        }
+      }
+      const file = form.get("audio");
+      if (file instanceof File && file.size > 0) {
+        if (file.size > MAX_AUDIO_BYTES) {
+          return NextResponse.json({ error: "The recording is too long (max 15 MB)." }, { status: 400 });
+        }
+        audio = file;
+      }
+    } else {
+      const body = await request.json().catch(() => null);
+      rawTranscript = typeof body?.transcript === "string" ? body.transcript : "";
+      rawUpdate = body?.update ?? null;
+    }
+
+    const transcript = rawTranscript.trim().slice(0, 4000);
     if (transcript.length < 10) {
       return NextResponse.json({ error: "A valid transcript is required." }, { status: 400 });
     }
-    const parsedUpdate = VoiceUpdateSchema.safeParse(body?.update);
+    const parsedUpdate = VoiceUpdateSchema.safeParse(rawUpdate);
     if (!parsedUpdate.success) {
       return NextResponse.json(
         { error: "The extracted update failed validation — please re-run the preview." },
@@ -42,12 +76,16 @@ export async function POST(
 
     await store.updateJobFacts(id, newPack.facts, newPack, []);
 
+    // Persist the recording (when one was sent) so the voicenote is replayable.
+    const storagePath = audio ? await storeVoiceNote(id, audio) : null;
+
     const ts = new Date().toISOString();
     await store.addEvidence(
       id,
       update.evidence.map((e, i) => ({
         ...e,
         id: `${ts}-v-${i}`,
+        ...(i === 0 && storagePath ? { storage_path: storagePath } : {}),
         created_at: ts,
       })),
     );
@@ -59,6 +97,7 @@ export async function POST(
       metadata: {
         version: newPack.version,
         transcription: "applied",
+        audio_stored: Boolean(storagePath),
         update_notes: update.notes,
       },
     });
@@ -67,6 +106,7 @@ export async function POST(
       ok: true,
       scope: newPack,
       status: newPack.status,
+      audio_stored: Boolean(storagePath),
     });
   } catch (error) {
     console.error("[QuoteReady] voice-note apply failed:", error);
@@ -74,5 +114,29 @@ export async function POST(
       { error: "Could not apply the update — please try again." },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * Upload the recording to the private `voice-notes` bucket and return its
+ * storage path (null when Storage is unavailable — the note still applies,
+ * it simply has no saved audio).
+ */
+async function storeVoiceNote(jobId: string, audio: File): Promise<string | null> {
+  const db = getServerSupabase();
+  if (!db) return null;
+  try {
+    const buffer = Buffer.from(await audio.arrayBuffer());
+    const ext = audio.type.includes("mp4") ? "m4a" : audio.type.includes("wav") ? "wav" : "webm";
+    const path = `jobs/${jobId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const { error } = await db.storage.from("voice-notes").upload(path, buffer, {
+      contentType: audio.type || "audio/webm",
+      upsert: false,
+    });
+    if (error) throw error;
+    return path;
+  } catch (error) {
+    console.warn("[QuoteReady] voice-note audio upload failed:", (error as Error).message);
+    return null;
   }
 }

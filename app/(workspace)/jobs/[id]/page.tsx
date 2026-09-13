@@ -253,6 +253,8 @@ export default async function JobDetailPage({
   const photoEvidence = job.evidence.filter((e) => e.type === "photo_observation");
   const voiceEvidence = job.evidence.filter((e) => e.type === "voice_note");
   const lastVoice = voiceEvidence[voiceEvidence.length - 1];
+  // the most recent site note that has its recording saved (replayable)
+  const recordedVoice = [...voiceEvidence].reverse().find((e) => e.storage_path);
   const lastVoiceAudit = [...job.audit_events]
     .filter((a) => a.event_type === "voice_note_applied")
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
@@ -351,6 +353,9 @@ export default async function JobDetailPage({
           ? {
               transcript: lastVoice.claim,
               time: lastVoiceAudit ? clock(lastVoiceAudit.created_at) : clock(job.updated_at),
+              audioUrl: recordedVoice
+                ? `/api/jobs/${job.id}/voice-note/audio?evidence=${recordedVoice.id}`
+                : null,
             }
           : null
       }

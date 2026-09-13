@@ -65,11 +65,12 @@ Enquiry arrives (text / call / web form / email / walk-in / photos)
 ### Voice & audio (Built With ElevenLabs)
 | Feature | What it does |
 |---|---|
-| Record site note | In-browser MediaRecorder → Scribe (`scribe_v1`) transcription (server-side, key-protected) |
+| Record site note | In-browser MediaRecorder → **ElevenLabs Scribe** (`scribe_v1`) transcription (server-side, key-protected) — the only voice engine |
+| Replay the note | The recording is played back in the modal and saved with the note, so it can be replayed later from the job's evidence card |
 | Paste transcript | Works with no microphone — the demo note pre-fills it |
-| Live extraction | Gemini turns the transcript into structured fact updates + risk flags |
+| Key-info extraction | Gemini turns the transcript into structured fact updates + risk flags (deterministic fallback if live AI is down) |
 | What changed | Preview diff (facts before → after, new risk flags) **before** anything is applied |
-| Apply update | User-approved → new scope version + audit event; score/band re-computed |
+| Apply update | User-approved → recording saved to Storage, new scope version + audit event; score/band re-computed |
 | Pre-call briefing | Deterministic spoken summary ("Jordan's enquiry is 62% quote ready… ask about property access"); TTS audio when a cloned voice is configured, written text otherwise |
 
 ### Data, resilience, transparency
