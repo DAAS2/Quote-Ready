@@ -15,21 +15,23 @@ import { BrandLogoSvg } from "@/components/brand/logo";
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 /** The recorded product walkthrough, served from /public. */
-const DEMO_VIDEO_SRC = "/demo/quote-ready-demo.mp4";
+const DEMO_VIDEO_SRC = "/demo/quote-ready-shorter-demo.mp4";
 
 /**
- * Hero demo — the recorded walkthrough of the real product, framed in browser
- * chrome so it reads as the app rather than a marketing clip.
+ * Hero demo — the recorded walkthrough of the real product, embedded directly.
+ * The recording already shows the app, so nothing frames it: no browser chrome,
+ * no controls, no pause affordance.
  *
- * It autoplays muted, inline and looping. Autoplay is treated as a courtesy,
- * never a guarantee: if the browser refuses (low-power mode, data saver, or a
- * reduced-motion preference) the player just waits behind a play affordance
- * instead of erroring.
+ * It autoplays muted, inline, and loops forever. Autoplay is treated as a
+ * courtesy, never a guarantee: if the browser refuses (low-power mode, data
+ * saver, or a reduced-motion preference) the first frame still paints, and a
+ * click starts playback without ever stopping it.
+ *
+ * Nothing here is derived from React state during the first render, so the
+ * server and client markup match exactly and hydration stays silent.
  */
 function HeroDemoVideo() {
   const video = useRef<HTMLVideoElement>(null);
-  const [ready, setReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -42,138 +44,51 @@ function HeroDemoVideo() {
     void el.play().catch(() => {});
   }, []);
 
-  // Never let the placeholder outstay its welcome: if the media events are
-  // throttled (data saver, reduced motion) the first frame still shows.
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
-
-  function togglePlayback() {
-    const el = video.current;
-    if (!el) return;
-    if (el.paused) void el.play().catch(() => {});
-    else el.pause();
+  /** Restart if playback was blocked. Deliberately one-way: never pauses. */
+  function resume() {
+    void video.current?.play().catch(() => {});
   }
 
   return (
     <div className="w-full max-w-5xl mt-12 text-left">
-      <div className="rounded-xl overflow-hidden bg-surface-container-lowest shadow-[0_12px_36px_rgba(16,42,67,0.09)] transition-all">
-        {/* Realistic browser chrome */}
-        <div className="bg-surface-container-high">
-          {/* Tab strip */}
-          <div className="flex items-end gap-2 px-3 pt-2.5">
-            <div className="flex items-center gap-1.5 pb-2 pl-1">
-              <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-              <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
-              <span className="w-3 h-3 rounded-full bg-[#28c840]" />
-            </div>
-            <div className="flex items-center gap-2 rounded-t-lg bg-surface-container-lowest px-3 py-1.5 max-w-[280px] min-w-0">
-              <BrandLogoSvg tone="light" wordmark={false} className="h-4 w-4 shrink-0" />
-              <span className="font-body-sm text-body-sm text-on-surface truncate">
-                Job QR-2024-089 · QuoteReady
-              </span>
-              <span className="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0">
-                close
-              </span>
-            </div>
-            <span className="material-symbols-outlined text-[18px] text-on-surface-variant pb-2">
-              add
+      <div className="rounded-xl overflow-hidden bg-[#0B1B2B] shadow-[0_12px_36px_rgba(16,42,67,0.09)]">
+        {failed ? (
+          /* If the file cannot be decoded, hand off to the live demo instead */
+          <div className="aspect-video flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <span className="material-symbols-outlined text-[30px] text-[#b0c9e8]">
+              videocam_off
             </span>
-          </div>
-          {/* Toolbar + address bar */}
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className="hidden sm:flex items-center gap-2 text-on-surface-variant">
-              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-              <span className="material-symbols-outlined text-[18px] opacity-40">arrow_forward</span>
-              <span className="material-symbols-outlined text-[18px]">refresh</span>
-            </div>
-            <div className="flex-1 flex items-center gap-2 min-w-0 h-8 px-3 rounded-full bg-surface-container-lowest text-on-surface-variant font-data-mono text-label-sm shadow-sm">
-              <span className="material-symbols-outlined text-[14px] text-[#15803D]">lock</span>
-              <span className="truncate">
-                app.quoteready.com.au/jobs/QR-2024-089
-              </span>
-            </div>
-            <div className="hidden md:flex items-center gap-3 font-label-sm text-label-sm text-on-surface-variant">
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                <span>Audit Sync Active</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        {/* The recorded walkthrough, playing inside the chrome */}
-        <div className="group/video relative aspect-video bg-[#0B1B2B] overflow-hidden">
-          {!failed && (
-            <video
-              ref={video}
-              src={DEMO_VIDEO_SRC}
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="auto"
-              disablePictureInPicture
-              aria-label="QuoteReady product walkthrough"
-              className={`h-full w-full object-cover transition-opacity duration-700 ${
-                ready ? "opacity-100" : "opacity-0"
-              }`}
-              onLoadedData={() => setReady(true)}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              onError={() => setFailed(true)}
-              onClick={togglePlayback}
-            />
-          )}
-
-          {/* Placeholder while the first frames buffer */}
-          {!ready && !failed && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-surface-container-high to-surface-container">
-              <span className="w-9 h-9 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-              <span className="font-label-sm text-label-sm text-on-surface-variant">
-                Loading the walkthrough…
-              </span>
-            </div>
-          )}
-
-          {/* If the file cannot be decoded, hand off to the live demo instead */}
-          {failed && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-              <span className="material-symbols-outlined text-[30px] text-on-surface-variant">
-                videocam_off
-              </span>
-              <span className="font-headline-sm text-headline-sm text-on-surface">
-                The walkthrough could not load
-              </span>
-              <span className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
-                Open the live demo to run the same intake, analysis and follow-up flow yourself.
-              </span>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors"
-              >
-                <span>Open live demo</span>
-                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-              </Link>
-            </div>
-          )}
-
-          {/* Play/pause — always shown while paused, on hover while playing */}
-          {!failed && (
-            <button
-              type="button"
-              onClick={togglePlayback}
-              aria-label={playing ? "Pause the walkthrough" : "Play the walkthrough"}
-              className={`absolute bottom-3 right-3 w-10 h-10 rounded-full bg-black/55 text-white backdrop-blur-sm flex items-center justify-center transition-opacity duration-200 hover:bg-black/75 ${
-                playing ? "opacity-0 group-hover/video:opacity-100 focus-visible:opacity-100" : "opacity-100"
-              }`}
+            <span className="font-headline-sm text-headline-sm text-white">
+              The walkthrough could not load
+            </span>
+            <span className="font-body-sm text-body-sm text-[#b0c9e8] max-w-md">
+              Open the live demo to run the same intake, analysis and follow-up flow yourself.
+            </span>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors"
             >
-              <span className="material-symbols-outlined text-[20px]">
-                {playing ? "pause" : "play_arrow"}
-              </span>
-            </button>
-          )}
-        </div>
+              <span>Open live demo</span>
+              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+            </Link>
+          </div>
+        ) : (
+          <video
+            ref={video}
+            src={DEMO_VIDEO_SRC}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            controls={false}
+            disablePictureInPicture
+            aria-label="QuoteReady product walkthrough"
+            className="block w-full h-auto cursor-pointer"
+            onError={() => setFailed(true)}
+            onClick={resume}
+          />
+        )}
       </div>
     </div>
   );
@@ -367,7 +282,7 @@ export function LandingPage() {
                 Built for human review. No automatic pricing. No automatic customer messages.
               </span>
             </div>
-            {/* Recorded product walkthrough — autoplays muted and loops */}
+            {/* Recorded product walkthrough — autoplays muted and loops forever */}
             <div className="hero-el w-full flex justify-center">
               <HeroDemoVideo />
             </div>
