@@ -1,17 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4f46e5"/>
-      <stop offset="0.55" stop-color="#5b6ce9"/>
-      <stop offset="1" stop-color="#b06a3f"/>
-    </linearGradient>
-  </defs>
-  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#g)"/>
-  <rect x="4" y="4" width="56" height="56" rx="16" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
-  <g stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M14 20h17" opacity="0.55"/>
-    <path d="M14 32h36" opacity="0.8"/>
-    <path d="M14 44h21" opacity="0.55"/>
-    <path d="M42 38l5 5 8.5-9.5" transform="translate(0,3)" opacity="0.95"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <!-- Favicon: the QuoteReady brand mark, identical to BrandLogoSvg in
+       components/brand/logo.tsx (checkmark + clipboard on the teal tile),
+       scaled to fill the 40x40 canvas so it still reads at 16px. -->
+  <g transform="scale(1.25) translate(-2 -4)">
+    <rect x="2" y="4" width="32" height="32" rx="8" fill="#0F766E" />
+    <path
+      d="M22 11H25C26.1046 11 27 11.8954 27 13V27C27 28.1046 26.1046 29 25 29H11C9.89543 29 9 28.1046 9 27V13C9 11.8954 9.89543 11 11 11H14"
+      stroke="#A7F3D0"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      fill="none"
+    />
+    <path
+      d="M12 21L16 25L24 15"
+      stroke="#FFFFFF"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      fill="none"
+    />
   </g>
 </svg>

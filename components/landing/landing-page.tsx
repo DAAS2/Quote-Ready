@@ -95,6 +95,10 @@ function HeroDemoVideo() {
             disablePictureInPicture
             aria-label="QuoteReady product walkthrough"
             className="block w-full h-auto cursor-pointer"
+            // Browser extensions tag media elements with their own classes before
+            // hydration, which React reports as a mismatch it will not patch up.
+            // Ours is the only class that matters here, so suppress the diff.
+            suppressHydrationWarning
             onError={() => setFailed(true)}
             onClick={resume}
           />

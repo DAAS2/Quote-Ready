@@ -192,11 +192,36 @@
   ::selection {
     @apply bg-primary-container/15;
   }
+  /*
+   * Scrollbars are visible on purpose. Hiding them made long pages (the landing
+   * page especially) look like they simply ended — there was no affordance
+   * saying there was more below the fold. They are themed rather than default
+   * so the page still reads as one surface. `.custom-scroll` below overrides
+   * this with a narrower bar for modal/panel internals.
+   */
   ::-webkit-scrollbar {
-    display: none;
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-primary) 35%, transparent);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-primary) 55%, transparent);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
   html {
-    scrollbar-width: none;
+    /* Firefox equivalent of the rules above */
+    scrollbar-color: color-mix(in srgb, var(--color-primary) 40%, transparent) transparent;
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
   }
