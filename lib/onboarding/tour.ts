@@ -115,11 +115,15 @@ const PENDING_KEY = "qr-tour-pending";
 const STEP_KEY = "qr-tour-step";
 const JOB_KEY = "qr-tour-job";
 
+export const TOUR_REQUEST_EVENT = "qr:tour-request";
+
 export function requestTour(): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(PENDING_KEY, "1");
   window.localStorage.removeItem(STEP_KEY);
   window.localStorage.removeItem(JOB_KEY);
+  // let an already-mounted tour overlay (e.g. replay from Settings) react
+  window.dispatchEvent(new CustomEvent(TOUR_REQUEST_EVENT));
 }
 
 export function isTourPending(): boolean {

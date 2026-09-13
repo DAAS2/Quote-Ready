@@ -44,7 +44,7 @@ export function AnalysingView({
   const [scanProgress, setScanProgress] = useState(58);
   const [photoProgress, setPhotoProgress] = useState(20);
   const [stage, setStage] = useState<0 | 1 | 2 | 3>(1);
-  const [eta, setEta] = useState("~8 seconds");
+  const [elapsed, setElapsed] = useState(0);
   const startedRef = useRef(false);
   const finishedRef = useRef(false);
 
@@ -54,18 +54,14 @@ export function AnalysingView({
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // staged progress animation
+    // staged progress animation — deliberately asymptotic so a slow model call
+    // (photo analysis can take 20s+) never freezes the bars at 100%
     const ticker = setInterval(() => {
-      setScanProgress((p) => (p < 92 ? p + Math.floor(Math.random() * 4) + 1 : p));
-      setPhotoProgress((p) => (p < 96 ? p + Math.floor(Math.random() * 6) + 2 : p));
-    }, 1200);
+      setScanProgress((p) => (p < 92 ? p + Math.floor(Math.random() * 3) + 1 : p));
+      setPhotoProgress((p) => (p < 94 ? p + Math.floor(Math.random() * 4) + 1 : p));
+      setElapsed((e) => e + 1);
+    }, 1000);
     timers.push(ticker as unknown as ReturnType<typeof setTimeout>);
-    timers.push(
-      setTimeout(() => setEta("~5 seconds"), 2500) as unknown as ReturnType<typeof setTimeout>,
-    );
-    timers.push(
-      setTimeout(() => setEta("~2 seconds"), 4500) as unknown as ReturnType<typeof setTimeout>,
-    );
 
     // run the real analysis
     void (async () => {
@@ -112,6 +108,7 @@ export function AnalysingView({
   }
 
   const photos = photoPaths.slice(0, 2);
+  const photosDone = photoPaths.length === 0 || photoProgress >= 93;
 
   return (
     <div className="flex flex-col w-full">
@@ -220,7 +217,11 @@ export function AnalysingView({
                 </span>
               </div>
               <span className="font-data-mono text-label-sm text-on-surface-variant bg-surface-container-low px-2.5 py-1 rounded">
-                {stage >= 3 ? "Opening review…" : `ETA ${eta}`}
+                {stage >= 3
+                  ? "Opening review…"
+                  : elapsed > 30
+                    ? `Still working — ${elapsed}s elapsed`
+                    : `ETA ~${Math.max(2, 24 - elapsed)}s`}
               </span>
             </div>
             <div className="flex items-start gap-space-md pt-2">
@@ -297,11 +298,17 @@ export function AnalysingView({
             </div>
             {/* Step 2: Attached Photos (Active with Photo Previews) */}
             <div className="flex items-start gap-space-md p-space-md rounded-xl bg-surface-container-low transition-all">
-              <div className="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm ${
+                  stage >= 3 || photosDone
+                    ? "bg-surface-container text-primary"
+                    : "bg-primary text-on-primary"
+                }`}
+              >
                 <span
-                  className={`material-symbols-outlined text-[20px] ${stage >= 3 ? "" : "animate-spin"}`}
+                  className={`material-symbols-outlined text-[20px] ${stage >= 3 || photosDone ? "" : "animate-spin"}`}
                 >
-                  {stage >= 3 ? "check" : "progress_activity"}
+                  {stage >= 3 || photosDone ? "check" : "progress_activity"}
                 </span>
               </div>
               <div className="flex flex-col flex-1 min-w-0">
@@ -311,24 +318,36 @@ export function AnalysingView({
                       Reviewing attached photos
                     </span>
                     <span className="text-primary font-data-mono text-label-sm font-semibold">
-                      {photoPaths.length === 0 ? "No photos" : `${photoProgress}%`}
+                      {photoPaths.length === 0
+                        ? "No photos"
+                        : photosDone
+                          ? "Verified"
+                          : `${photoProgress}%`}
                     </span>
                   </div>
                   <span className="font-label-sm text-label-sm text-primary font-medium">
-                    {photoPaths.length === 0 ? "Text-only analysis" : "Vision parsing active"}
+                    {photoPaths.length === 0
+                      ? "Text-only analysis"
+                      : photosDone
+                        ? "Photos processed"
+                        : "Vision parsing active"}
                   </span>
                 </div>
                 {/* Mini Progress Bar */}
                 <div className="w-full h-1.5 bg-surface-container rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-primary rounded-full transition-all duration-500"
-                    style={{ width: `${photoPaths.length === 0 ? 100 : photoProgress}%` }}
+                    style={{
+                      width: `${photoPaths.length === 0 ? 100 : photosDone ? 100 : photoProgress}%`,
+                    }}
                   ></div>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant pt-2">
                   {photoPaths.length === 0
                     ? "No photos were attached — analysis continues from the written enquiry details..."
-                    : `Detecting fixture model, basin spout drip rate, and under-sink isolation valve visibility across ${photoPaths.length} file${photoPaths.length === 1 ? "" : "s"}...`}
+                    : photosDone
+                      ? `Reviewed ${photoPaths.length} attached file${photoPaths.length === 1 ? "" : "s"} — finishing the scope assessment…`
+                      : `Detecting the fixture, visible access and isolation points across ${photoPaths.length} file${photoPaths.length === 1 ? "" : "s"}...`}
                 </p>
                 {/* Embedded Image Evidence Cards */}
                 {photos.length > 0 && (

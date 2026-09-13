@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  TOUR_REQUEST_EVENT,
   TOUR_STEPS,
   finishTour,
   isTourPending,
@@ -39,14 +40,20 @@ export function TourOverlay() {
   const jobIdRef = useRef<string | null>(null);
   const advancedRef = useRef(false);
 
-  // Pick up a pending tour request (set by signup / settings).
-  useEffect(() => {
-    if (!isTourPending()) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  const begin = useCallback(() => {
     setIndex(readTourStep());
     jobIdRef.current = readTourJobId();
     setActive(true);
   }, []);
+
+  // Pick up a pending tour request (set by signup / settings). The event lets
+  // an already-mounted overlay restart the tour when replayed from Settings.
+  useEffect(() => {
+    if (isTourPending()) begin();
+    const onRequest = () => begin();
+    window.addEventListener(TOUR_REQUEST_EVENT, onRequest);
+    return () => window.removeEventListener(TOUR_REQUEST_EVENT, onRequest);
+  }, [begin]);
 
   const step = TOUR_STEPS[Math.min(index, TOUR_STEPS.length - 1)]!;
 
