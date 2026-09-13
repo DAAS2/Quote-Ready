@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import { FollowUpModal } from "@/components/jobs/follow-up-modal";
 import { AddEvidencePanel } from "@/components/jobs/add-evidence-panel";
-import { JobSectionNav } from "@/components/jobs/job-section-nav";
 import type { DraftRow } from "@/lib/data/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -96,8 +95,6 @@ export function JobDetailView(props: DetailProps) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [showWhy, setShowWhy] = useState(true);
-  // which scope category the section navbar is showing (tabs, not scroll-spy)
-  const [activeSection, setActiveSection] = useState("sec-required");
   const [playing, setPlaying] = useState(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -113,46 +110,6 @@ export function JobDetailView(props: DetailProps) {
   }
 
   const isV2 = (props.scopeVersion ?? 1) >= 2 && props.versions.length >= 2;
-
-  const sectionItems = [
-    {
-      id: "sec-required",
-      label: "Required details",
-      count: props.knownFacts.length,
-      icon: "fact_check",
-    },
-    {
-      id: "sec-triggers",
-      label: "Inspection triggers",
-      count: props.inspectionTriggers.length,
-      icon: "warning_amber",
-    },
-    {
-      id: "sec-assumptions",
-      label: "Assumptions",
-      count: props.assumptions.length,
-      icon: "rule",
-    },
-    {
-      id: "sec-exclusions",
-      label: "Exclusions",
-      count: props.exclusions.length,
-      icon: "block",
-    },
-    {
-      id: "sec-missing",
-      label: "Still needed",
-      count: props.missingFields.length,
-      icon: "pending_actions",
-    },
-  ].filter((s) => s.count > 0 || s.id === "sec-required");
-
-  /**
-   * Sections are tabs: only the active category renders. Sections that are not
-   * part of the tab set (scope diff, history, recommendation, next action)
-   * always render underneath.
-   */
-  const show = (id: string) => activeSection === id;
 
   async function approveScope() {
     setBusy("approve");
@@ -496,23 +453,15 @@ export function JobDetailView(props: DetailProps) {
         </section>
       )}
 
-      {/* Section navbar — one tap per scope section */}
-      {props.hasScope && sectionItems.length > 1 && (
-        <JobSectionNav items={sectionItems} active={activeSection} onChange={setActiveSection} />
-      )}
-
-      {/* Operational Layout — one column so a section tab swaps the whole panel */}
-      <div className="flex flex-col gap-space-lg">
-        {/* MAIN COLUMN */}
-        <div className="flex flex-col gap-space-lg min-w-0">
+      {/* Two-Column Operational Layout */}
+      <div className={`grid grid-cols-1 xl:grid-cols-12 gap-space-lg ${isV2 ? "lg:grid-cols-12" : ""}`}>
+        {/* LEFT COLUMN */}
+        <div className={`xl:col-span-8 flex flex-col gap-space-lg min-w-0 ${isV2 ? "lg:col-span-8" : ""}`}>
           {isV2 ? (
             <>
               {/* v2 Card 1: Latest Evidence Card */}
-              {show("sec-required") && (
               <section
                 id="sec-required"
-                role="tabpanel"
-                aria-labelledby="tab-sec-required"
                 className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
               >
                 <div className="flex items-center justify-between border-b-0 pb-1">
@@ -667,7 +616,6 @@ export function JobDetailView(props: DetailProps) {
                   </div>
                 )}
               </section>
-              )}
 
               {/* v2 Card 2: What changed (Scope diff) */}
               <section
@@ -895,8 +843,8 @@ export function JobDetailView(props: DetailProps) {
                     </span>
                   </div>
                 </div>
-                {/* Image Gallery Row — shown with the required-details category */}
-                {show("sec-required") && props.photos.length > 0 && (
+                {/* Image Gallery Row */}
+                {props.photos.length > 0 && (
                   <div className="flex flex-col gap-2 pt-2">
                     <div className="flex items-center justify-between">
                       <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">
@@ -944,7 +892,7 @@ export function JobDetailView(props: DetailProps) {
               </article>
 
               {/* v1 Card: What we know */}
-              {show("sec-required") && props.knownFacts.length > 0 && (
+              {props.knownFacts.length > 0 && (
                 <article
                   id="sec-required"
                   className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
@@ -984,7 +932,7 @@ export function JobDetailView(props: DetailProps) {
               )}
 
               {/* v1 Card: Still needed before fixed estimate */}
-              {show("sec-missing") && props.missingFields.length > 0 && (
+              {props.missingFields.length > 0 && (
                 <article
                   id="sec-missing"
                   className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
@@ -1040,18 +988,16 @@ export function JobDetailView(props: DetailProps) {
           {/* server-rendered panel — the explicit key keeps React happy now that
               it sits in a static children array with the other cards */}
           {props.quotePanel && <Fragment key="quote-panel">{props.quotePanel}</Fragment>}
+
         </div>
 
-        {/* SECONDARY COLUMN — recommendation + tabbed scope categories */}
-        <div className="flex flex-col gap-space-lg min-w-0">
+        {/* RIGHT COLUMN */}
+        <div className={`xl:col-span-4 flex flex-col gap-space-lg min-w-0 ${isV2 ? "lg:col-span-4" : ""}`}>
           {isV2 ? (
             <>
-              {/* v2 Card 1: Inspection triggers */}
-              {show("sec-triggers") && (
+              {/* v2 Card 1: Strong Amber/Red Recommendation Card */}
               <section
                 id="sec-triggers"
-                role="tabpanel"
-                aria-labelledby="tab-sec-triggers"
                 className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
               >
                 <div className="flex items-start gap-space-sm">
@@ -1099,14 +1045,10 @@ export function JobDetailView(props: DetailProps) {
                   </span>
                 </div>
               </section>
-              )}
 
-              {/* v2 Card 2: Still needed before a fixed estimate */}
-              {show("sec-missing") && (
+              {/* v2 Card 2: Next Best Action Card */}
               <section
                 id="sec-missing"
-                role="tabpanel"
-                aria-labelledby="tab-sec-missing"
                 className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
               >
                 <div className="flex items-center justify-between">
@@ -1175,17 +1117,12 @@ export function JobDetailView(props: DetailProps) {
                   </button>
                 </div>
               </section>
-              )}
 
               {/* v2 Card: Assumptions & exclusions */}
-              {(show("sec-assumptions") || show("sec-exclusions")) &&
-                (props.assumptions.length > 0 || props.exclusions.length > 0) && (
+              {(props.assumptions.length > 0 || props.exclusions.length > 0) && (
                 <section className="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
-                  {show("sec-assumptions") && (
                   <div
                     id="sec-assumptions"
-                    role="tabpanel"
-                    aria-labelledby="tab-sec-assumptions"
                     className="flex flex-col gap-2.5 scroll-mt-32"
                   >
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
@@ -1207,12 +1144,8 @@ export function JobDetailView(props: DetailProps) {
                       </div>
                     ))}
                   </div>
-                  )}
-                  {show("sec-exclusions") && (
                   <div
                     id="sec-exclusions"
-                    role="tabpanel"
-                    aria-labelledby="tab-sec-exclusions"
                     className="flex flex-col gap-2.5 pt-3 border-t border-border scroll-mt-32"
                   >
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
@@ -1234,7 +1167,6 @@ export function JobDetailView(props: DetailProps) {
                       </div>
                     ))}
                   </div>
-                  )}
                 </section>
               )}
             </>
@@ -1313,7 +1245,7 @@ export function JobDetailView(props: DetailProps) {
               </article>
 
               {/* v1 Card: Scope assumptions */}
-              {show("sec-assumptions") && props.assumptions.length > 0 && (
+              {props.assumptions.length > 0 && (
                 <article
                   id="sec-assumptions"
                   className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
@@ -1350,7 +1282,7 @@ export function JobDetailView(props: DetailProps) {
               )}
 
               {/* v1 Card: Inspection triggers */}
-              {show("sec-triggers") && props.inspectionTriggers.length > 0 && (
+              {props.inspectionTriggers.length > 0 && (
                 <article
                   id="sec-triggers"
                   className="bg-[#FFFBEB] rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
@@ -1380,7 +1312,7 @@ export function JobDetailView(props: DetailProps) {
               )}
 
               {/* v1 Card: Exclusions */}
-              {show("sec-exclusions") && props.exclusions.length > 0 && (
+              {props.exclusions.length > 0 && (
                 <article
                   id="sec-exclusions"
                   className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md scroll-mt-32"
