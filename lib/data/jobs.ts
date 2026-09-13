@@ -133,6 +133,14 @@ export const store = {
   saveTemplate: (input: Parameters<Store["saveTemplate"]>[0]) =>
     withFallback((s) => s.saveTemplate(input)),
   deleteTemplate: (id: string) => withFallback((s) => s.deleteTemplate(id)),
+  listQuotes: (jobId: string) => withFallback((s) => s.listQuotes(jobId)),
+  getQuote: (id: string) => withFallback((s) => s.getQuote(id)),
+  createQuote: (input: Parameters<Store["createQuote"]>[0]) =>
+    withFallback((s) => s.createQuote(input)),
+  updateQuote: (...args: Parameters<Store["updateQuote"]>) =>
+    withFallback((s) => s.updateQuote(...args)),
+  deleteQuote: (id: string) => withFallback((s) => s.deleteQuote(id)),
+  listQuoteNumbers: () => withFallback((s) => s.listQuoteNumbers()),
   resetDemo: async () => {
     const primary = primaryStore();
     if (primary) {

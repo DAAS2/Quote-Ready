@@ -1,4 +1,11 @@
 import type { JobFacts, JobStatus, MessageType, ScopePack } from "@/lib/ai/schemas";
+import type {
+  CreateQuoteRecordInput,
+  QuoteDocument,
+  QuoteRecord,
+  QuoteStatus,
+  QuoteTotals,
+} from "@/lib/quotes/schema";
 import { DEMO_JOB_SEEDS } from "./demo-seed";
 import { buildSeedPack, SEED_AGE_HOURS } from "./seed";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
@@ -45,9 +52,14 @@ interface MemJob {
 
 type MemTemplate = Omit<TemplateRow, "organisation_id">;
 
-const g = globalThis as unknown as { __qr_mem?: Map<string, MemJob>; __qr_templates?: Map<string, MemTemplate> };
+const g = globalThis as unknown as {
+  __qr_mem?: Map<string, MemJob>;
+  __qr_templates?: Map<string, MemTemplate>;
+  __qr_quotes?: Map<string, QuoteRecord>;
+};
 const jobs: Map<string, MemJob> = (g.__qr_mem ??= new Map());
 const templates: Map<string, MemTemplate> = (g.__qr_templates ??= new Map());
+const quotes: Map<string, QuoteRecord> = (g.__qr_quotes ??= new Map());
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -371,8 +383,62 @@ export class MemoryStore implements Store {
     }
   }
 
+  async listQuotes(jobId: string): Promise<QuoteRecord[]> {
+    return [...quotes.values()]
+      .filter((q) => q.job_id === jobId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  async getQuote(id: string): Promise<QuoteRecord | null> {
+    return quotes.get(id) ?? null;
+  }
+
+  async createQuote(input: CreateQuoteRecordInput): Promise<string> {
+    const id = crypto.randomUUID();
+    const ts = nowIso();
+    quotes.set(id, {
+      id,
+      job_id: input.job_id,
+      quote_number: input.quote_number,
+      status: input.status ?? "draft",
+      document: input.document,
+      totals: input.totals,
+      customer_name: input.document.customer.name,
+      job_type_label: input.document.job_type_label,
+      created_at: ts,
+      updated_at: ts,
+    });
+    return id;
+  }
+
+  async updateQuote(
+    id: string,
+    patch: { document: QuoteDocument; totals: QuoteTotals; status?: QuoteStatus },
+  ): Promise<void> {
+    const quote = quotes.get(id);
+    if (!quote) throw new Error("quote not found");
+    quotes.set(id, {
+      ...quote,
+      document: patch.document,
+      totals: patch.totals,
+      status: patch.status ?? quote.status,
+      customer_name: patch.document.customer.name,
+      job_type_label: patch.document.job_type_label,
+      updated_at: nowIso(),
+    });
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    quotes.delete(id);
+  }
+
+  async listQuoteNumbers(): Promise<string[]> {
+    return [...quotes.values()].map((q) => q.quote_number);
+  }
+
   async resetDemo(): Promise<void> {
     jobs.clear();
+    quotes.clear();
     ensureSeed();
   }
 }

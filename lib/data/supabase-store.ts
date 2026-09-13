@@ -1,4 +1,11 @@
 import type { JobFacts, JobStatus, ScopePack } from "@/lib/ai/schemas";
+import type {
+  CreateQuoteRecordInput,
+  QuoteDocument,
+  QuoteRecord,
+  QuoteStatus,
+  QuoteTotals,
+} from "@/lib/quotes/schema";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DEMO_ORG_ID, resolveOrgId } from "./org";
 import type {
@@ -449,10 +456,88 @@ export class SupabaseStore implements Store {
       .eq("organisation_id", await this.org());
   }
 
+  async listQuotes(jobId: string): Promise<QuoteRecord[]> {
+    const { data, error } = await this.db
+      .from("quotes")
+      .select("*")
+      .eq("job_id", jobId)
+      .eq("organisation_id", await this.org())
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(toQuoteRecord);
+  }
+
+  async getQuote(id: string): Promise<QuoteRecord | null> {
+    const { data, error } = await this.db
+      .from("quotes")
+      .select("*")
+      .eq("id", id)
+      .eq("organisation_id", await this.org())
+      .maybeSingle();
+    if (error || !data) return null;
+    return toQuoteRecord(data);
+  }
+
+  async createQuote(input: CreateQuoteRecordInput): Promise<string> {
+    const { data, error } = await this.db
+      .from("quotes")
+      .insert({
+        organisation_id: await this.org(),
+        job_id: input.job_id,
+        quote_number: input.quote_number,
+        status: input.status ?? "draft",
+        document: input.document,
+        subtotal_cents: input.totals.subtotal_cents,
+        gst_cents: input.totals.gst_cents,
+        total_cents: input.totals.total_cents,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw error ?? new Error("Could not save the quote.");
+    return data.id;
+  }
+
+  async updateQuote(
+    id: string,
+    patch: { document: QuoteDocument; totals: QuoteTotals; status?: QuoteStatus },
+  ): Promise<void> {
+    const { error } = await this.db
+      .from("quotes")
+      .update({
+        document: patch.document,
+        subtotal_cents: patch.totals.subtotal_cents,
+        gst_cents: patch.totals.gst_cents,
+        total_cents: patch.totals.total_cents,
+        ...(patch.status ? { status: patch.status } : {}),
+      })
+      .eq("id", id)
+      .eq("organisation_id", await this.org());
+    if (error) throw error;
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    const { error } = await this.db
+      .from("quotes")
+      .delete()
+      .eq("id", id)
+      .eq("organisation_id", await this.org());
+    if (error) throw error;
+  }
+
+  async listQuoteNumbers(): Promise<string[]> {
+    const { data, error } = await this.db
+      .from("quotes")
+      .select("quote_number")
+      .eq("organisation_id", await this.org());
+    if (error) throw error;
+    return (data ?? []).map((row) => row.quote_number as string);
+  }
+
   async resetDemo(): Promise<void> {
     const org = await this.org();
     await this.db.from("jobs").delete().eq("organisation_id", org);
     await this.db.from("customers").delete().eq("organisation_id", org);
+    await this.db.from("quotes").delete().eq("organisation_id", org);
   }
 }
 
@@ -545,6 +630,43 @@ function toTemplateRow(row: {
     blurb: row.blurb,
     is_default: row.is_default,
     document: row.document,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function toQuoteRecord(row: {
+  id: string;
+  job_id: string;
+  quote_number: string;
+  status: string;
+  document: QuoteDocument;
+  subtotal_cents: number;
+  gst_cents: number;
+  total_cents: number;
+  created_at: string;
+  updated_at: string;
+}): QuoteRecord {
+  const document = row.document;
+  const subtotal = row.subtotal_cents ?? 0;
+  const gst = row.gst_cents ?? 0;
+  const total = row.total_cents ?? 0;
+  const deposit = Math.round((total * (document?.deposit_percent ?? 0)) / 100);
+  return {
+    id: row.id,
+    job_id: row.job_id,
+    quote_number: row.quote_number,
+    status: row.status as QuoteStatus,
+    document,
+    totals: {
+      subtotal_cents: subtotal,
+      gst_cents: gst,
+      total_cents: total,
+      deposit_cents: deposit,
+      balance_cents: total - deposit,
+    },
+    customer_name: document?.customer?.name ?? "",
+    job_type_label: document?.job_type_label ?? "",
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

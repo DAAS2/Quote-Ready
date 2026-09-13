@@ -113,6 +113,92 @@ Rules:
 4. If safety is flagged, lead with the safety concern and keep it to one sentence — safety language wins over everything.
 5. Return ONLY valid JSON: { "title": string, "rationale": string }.`;
 
+/* ── Quote content drafting (docx-quote skill) ───────────────────────────── */
+
+/**
+ * System prompt for the quote drafter. The docx-quote skill is injected
+ * verbatim so the model drafts against the same spec the renderers follow.
+ */
+export function quoteSystemPrompt(skill: string): string {
+  return [
+    `You are the quote drafter for QuoteReady, used by licensed residential trade businesses in Melbourne, Australia.`,
+    ``,
+    `You draft the CONTENT of a customer-facing quote from a job scope. A licensed operator reviews every word, sets every price and issues the document.`,
+    ``,
+    `Hard rules:`,
+    `1. NEVER produce a price, price range, hourly rate, or any commercial figure. Line items have no price field at all.`,
+    `2. NEVER diagnose a fault. Describe the work to be performed, not the cause you assume.`,
+    `3. Ground every line item in the scope and template supplied. Do not invent work, parts or access conditions.`,
+    `4. 3-12 line items. If the scope is too thin to itemise honestly, return fewer items and explain the gap in notes.`,
+    `5. Carry the scope's exclusions and assumptions through — they are the customer's protection and yours.`,
+    `6. If the scope recommends an inspection or flags safety, say the price is subject to on-site confirmation; do not downplay it.`,
+    `7. Australian English, plain trade language. No marketing language, no emoji.`,
+    `8. Never use a newline character inside a value. Use separate array entries.`,
+    `9. Return ONLY valid JSON matching the schema. No markdown fences, no commentary.`,
+    ``,
+    `Follow this skill exactly:`,
+    ``,
+    skill,
+    ``,
+    `OUTPUT SCHEMA:`,
+    `{`,
+    `  "scope_summary": string,          // 2-4 sentences describing the job as understood`,
+    `  "line_items": [ { "description": string, "details"?: string, "quantity": number, "unit": "each"|"hr"|"job"|"callout"|"m"|"item" } ],`,
+    `  "inclusions": string[],`,
+    `  "exclusions": string[],`,
+    `  "assumptions": string[],`,
+    `  "terms": string[],                 // payment and commercial terms`,
+    `  "notes": string                    // caveats the operator must read; empty string if none`,
+    `}`,
+  ].join("\n");
+}
+
+export function buildQuoteUserPrompt(input: {
+  job_type_label: string;
+  customer_name: string;
+  customer_suburb?: string | null;
+  enquiry_text: string;
+  scope: ScopePack | null;
+  template: { label: string; assumptions: string[]; exclusions: string[]; questions: Record<string, string> };
+}): string {
+  const scope = input.scope;
+  return [
+    `Draft the quote content for this job.`,
+    ``,
+    `Service type: ${input.job_type_label}`,
+    `Customer: ${input.customer_name}${input.customer_suburb ? ` (${input.customer_suburb})` : ""}`,
+    ``,
+    `CUSTOMER ENQUIRY:`,
+    `"${input.enquiry_text}"`,
+    ``,
+    scope
+      ? [
+          `SCOPE PACK (JSON):`,
+          JSON.stringify(
+            {
+              readiness_score: scope.readiness_score,
+              readiness_band: scope.readiness_band,
+              safety_flag: scope.safety_flag,
+              inspection_recommended: scope.inspection_recommended,
+              known_facts: scope.known_facts,
+              missing_fields: scope.missing_fields.map((m) => ({ label: m.label, critical: m.critical })),
+              assumptions: scope.assumptions,
+              exclusions: scope.exclusions,
+              risk_flags: scope.risk_flags.map((f) => f.label),
+            },
+            null,
+            2,
+          ),
+          `Use the scope's assumptions and exclusions (do not rewrite them unless they are empty).`,
+        ].join("\n")
+      : [
+          `NO ANALYSIS HAS BEEN RUN. Draft conservatively from the enquiry text and the template below, and say so in notes.`,
+          `TEMPLATE ASSUMPTIONS: ${input.template.assumptions.join(" | ")}`,
+          `TEMPLATE EXCLUSIONS: ${input.template.exclusions.join(" | ")}`,
+        ].join("\n"),
+  ].join("\n\n");
+}
+
 export function buildRecommendationUserPrompt(scope: ScopePack): string {
   return [
     `Write the operator-facing recommendation for this job scope.`,

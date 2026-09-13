@@ -9,6 +9,13 @@ import type {
   ScopePack,
 } from "@/lib/ai/schemas";
 import type { JobTemplate } from "@/lib/rules/job-templates";
+import type {
+  CreateQuoteRecordInput,
+  QuoteDocument,
+  QuoteRecord,
+  QuoteStatus,
+  QuoteTotals,
+} from "@/lib/quotes/schema";
 
 export interface CustomerRecord {
   full_name: string;
@@ -145,5 +152,16 @@ export interface Store {
   getTemplate(id: string): Promise<TemplateRow | null>;
   saveTemplate(input: SaveTemplateInput): Promise<string>;
   deleteTemplate(id: string): Promise<void>;
+  /** quotes are per job; newest first */
+  listQuotes(jobId: string): Promise<QuoteRecord[]>;
+  getQuote(id: string): Promise<QuoteRecord | null>;
+  createQuote(input: CreateQuoteRecordInput): Promise<string>;
+  updateQuote(
+    id: string,
+    patch: { document: QuoteDocument; totals: QuoteTotals; status?: QuoteStatus },
+  ): Promise<void>;
+  deleteQuote(id: string): Promise<void>;
+  /** every quote number in the organisation (for collision-free numbering) */
+  listQuoteNumbers(): Promise<string[]>;
   resetDemo(): Promise<void>;
 }

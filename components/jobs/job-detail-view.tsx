@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { RecordSiteNoteModal } from "@/components/jobs/record-site-note-modal";
 import { FollowUpModal } from "@/components/jobs/follow-up-modal";
@@ -75,6 +75,8 @@ interface DetailProps {
   drafts: DraftRow[];
   showAppliedBanner: boolean;
   auditCount: number;
+  /** server-rendered quote panel, slotted into the left column */
+  quotePanel?: ReactNode;
 }
 
 const READINESS_CIRCUMFERENCE = 113.1;
@@ -968,6 +970,8 @@ export function JobDetailView(props: DetailProps) {
               )}
             </>
           )}
+
+          {props.quotePanel}
         </div>
 
         {/* RIGHT COLUMN */}
