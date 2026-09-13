@@ -70,13 +70,15 @@ export function TourOverlay() {
     (next: number) => {
       if (next >= TOUR_STEPS.length) {
         end(true);
+        // Finishing the tour lands the user on their workspace home.
+        router.push("/dashboard");
         return;
       }
       writeTourStep(next);
       advancedRef.current = false;
       setIndex(next);
     },
-    [end],
+    [end, router],
   );
 
   // Navigate to the route a step belongs to.
@@ -88,6 +90,11 @@ export function TourOverlay() {
     const target = resolveTourRoute(route, readTourJobId() ?? jobIdRef.current);
     if (!target || target === "/jobs/") return;
     const [base, query] = target.split("?");
+    // While the tour's enquiry is being created, the form runs its own
+    // create-and-analyse flow and then redirects to the new job. Pushing a
+    // job route from here would race that request (and cancel it), so let the
+    // form own that one transition. Pushes that stay on the form are fine.
+    if (pathname === "/jobs/new" && base !== "/jobs/new") return;
     // Treat nested routes (e.g. /jobs/:id/analysing) as already "here" so the
     // tour never interrupts an in-flight analysis redirect.
     if (pathname.startsWith(`${base}/`)) return;

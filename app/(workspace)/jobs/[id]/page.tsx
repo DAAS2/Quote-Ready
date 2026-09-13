@@ -150,7 +150,10 @@ function buildEvidenceTimeline(job: JobDetail) {
   }));
 }
 
-function buildDiffRows(prev: ScopePack | null, current: ScopePack) {
+function buildDiffRows(prev: ScopePack | null | undefined, current: ScopePack | null | undefined) {
+  // A job is viewable before its first analysis lands (and while the tour is
+  // still creating it) — there is no diff to show until a scope exists.
+  if (!current) return [];
   const rows: Array<{
     param: string;
     before: string;
@@ -357,7 +360,7 @@ export default async function JobDetailPage({
             ? "Site observation merged into the scope; recommendation recalculated."
             : "Calculated from the customer enquiry and attached evidence.",
       }))}
-      diffRows={buildDiffRows(prevVersion, scope ?? (versions[0] as ScopePack))}
+      diffRows={buildDiffRows(prevVersion, scope ?? versions[0] ?? null)}
       hasScope={Boolean(scope)}
       inspectionRecommended={scope?.inspection_recommended ?? false}
       voiceEvidence={

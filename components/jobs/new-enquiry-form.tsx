@@ -276,7 +276,22 @@ export function NewEnquiryForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not create the enquiry.");
       if (isTour) setTourJobId(data.id);
-      router.push(kind === "analyse" ? `/jobs/${data.id}/analysing` : `/jobs/${data.id}`);
+
+      if (kind === "draft") {
+        router.push(`/jobs/${data.id}`);
+        return;
+      }
+
+      if (isTour) {
+        // The guided tour builds the scope with the deterministic engine (no
+        // live model call), so the review screen is ready the moment we land
+        // and step 7 of the tour always finds the readiness panel.
+        await fetch(`/api/jobs/${data.id}/analyse?fast=1`, { method: "POST" });
+        router.push(`/jobs/${data.id}`);
+        return;
+      }
+
+      router.push(`/jobs/${data.id}/analysing`);
     } catch (error) {
       toast.error((error as Error).message);
       setSubmitting(null);

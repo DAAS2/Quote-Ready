@@ -289,7 +289,7 @@ export function WorkspaceShell({
             disabled={signingOut}
             title={collapsed ? "Sign out" : undefined}
             className={cn(
-              "p-2.5 rounded-lg flex items-center gap-space-sm bg-error/15 hover:bg-error/25 text-inverse-on-surface font-label-md text-label-md transition-colors disabled:opacity-60",
+              "p-2.5 rounded-lg flex items-center gap-space-sm bg-error/25 hover:bg-error/40 text-white font-label-md text-label-md transition-colors disabled:opacity-60",
               collapsed && "lg:justify-center",
             )}
           >
@@ -404,7 +404,7 @@ export function WorkspaceShell({
                   type="button"
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="p-2.5 rounded-lg flex items-center gap-space-sm bg-error/15 hover:bg-error/25 text-inverse-on-surface font-label-md text-label-md transition-colors disabled:opacity-60"
+                  className="p-2.5 rounded-lg flex items-center gap-space-sm bg-error/25 hover:bg-error/40 text-white font-label-md text-label-md transition-colors disabled:opacity-60"
                 >
                   <span className="material-symbols-outlined text-[18px]">logout</span>
                   <span>{signingOut ? "Signing out…" : "Sign out"}</span>
