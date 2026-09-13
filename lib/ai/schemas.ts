@@ -36,6 +36,24 @@ export const JobStatusEnum = z.enum([
 ]);
 export type JobStatus = z.infer<typeof JobStatusEnum>;
 
+/** How the enquiry reached the business. */
+export const IntakeChannelEnum = z.enum([
+  "text",
+  "call",
+  "web_form",
+  "email",
+  "in_person",
+]);
+export type IntakeChannel = z.infer<typeof IntakeChannelEnum>;
+
+export const INTAKE_CHANNEL_LABELS: Record<IntakeChannel, string> = {
+  text: "Text / SMS",
+  call: "Phone call",
+  web_form: "Web form",
+  email: "Email",
+  in_person: "In person",
+};
+
 export const ReadinessBandEnum = z.enum([
   "needs_information",
   "inspection_recommended",
@@ -206,10 +224,28 @@ export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
 /* ── Voice-note update extraction (Gemini on transcript) ─────────────────── */
 
+const WaterDamageCoerce = z
+  .union([WaterDamageEnum, z.string()])
+  .transform((v): z.infer<typeof WaterDamageEnum> | undefined => {
+    if (typeof v === "string") {
+      const s = v.toLowerCase();
+      if (["possible", "suspected", "maybe", "damp", "moist", "swollen", "wet"].includes(s)) return "possible";
+      if (["confirmed", "yes", "definite", "soaked", "flooded", "standing water"].includes(s)) return "confirmed";
+      if (["none", "none_visible", "no", "dry"].includes(s)) return "none_visible";
+      return undefined;
+    }
+    return v;
+  });
+
 export const VoiceUpdateSchema = z.object({
-  facts: JobFactsSchema,
+  facts: JobFactsSchema.extend({
+    water_damage: WaterDamageCoerce.optional(),
+  }),
   evidence: z.array(EvidenceItemSchema).max(20).default([]),
   risk_flags: z.array(z.string().max(60)).max(10).default([]),
-  notes: z.string().max(400).default(""),
-});
+  notes: z.union([z.string().max(400), z.array(z.string().max(200)).max(5)]).default(""),
+}).transform((data) => ({
+  ...data,
+  notes: Array.isArray(data.notes) ? data.notes.join(" ") : data.notes,
+}));
 export type VoiceUpdate = z.infer<typeof VoiceUpdateSchema>;

@@ -1,4 +1,4 @@
-import type { JobType } from "./schemas";
+import type { JobType, ScopePack } from "./schemas";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Gemini prompts. Rules of the house:
@@ -75,16 +75,65 @@ export const VOICE_UPDATE_SYSTEM_PROMPT = `You are the field-note analyst for Qu
 Rules:
 1. Extract only what the plumber actually said. NEVER invent values.
 2. facts: fill ONLY the keys the note provides new information for. Omit everything else.
-3. evidence: one entry per distinct claim, type "voice_note", source_reference "voice_note_1", certainty reflecting how plainly the plumber stated it ("high" for direct statements like "the cabinet base is damp").
-4. risk_flags must come ONLY from this vocabulary: possible_concealed_leak, water_damage, corroded_fixture, sewage_concern, overflow, floor_water_damage, gas_concern, electrical_concern, tank_leak, no_hot_water_with_leak, uncertain_cause, access_unclear, insufficient_diagnostic_evidence.
-5. notes: 0-2 short operational notes (e.g. "Plumber recommends inspection before fixed price").
-6. Return ONLY valid JSON: { "facts": { ... }, "evidence": [...], "risk_flags": [...], "notes": string }
-
-Facts keys available: location_in_property, fixture_type, system_type, system_age, symptoms, urgency, property_access, water_isolation_access, water_damage, customer_availability, suburb, photo_count, voice_note_count, notes.`;
+3. Facts values are short snake_case identifiers, not sentences. Examples:
+   - fixture_type: "corroded_mixer" | "mixer_tap" | "pillar_tap" | "close_coupled" | "concealed_cistern"
+   - water_isolation_access: "accessible" | "constrained" | "blocked"
+   - water_damage: EXACTLY "none_visible" | "possible" | "confirmed" (damp/moist/swollen = "possible"; soaked/flooded = "confirmed"; dry = "none_visible")
+   - urgency: "emergency" | "urgent" | "standard" | "flexible"
+   - property_access: short identifier like "easy_parking" | "side_gate"
+   - symptoms: short snake_case phrases (e.g. "continuous_drip", "corroded_fixture", "stuck_isolation_valve")
+4. evidence: one entry per distinct claim, type "voice_note", source_reference "voice_note_1", certainty reflecting how plainly the plumber stated it ("high" for direct statements like "the cabinet base is damp").
+5. risk_flags must come ONLY from this vocabulary: possible_concealed_leak, water_damage, corroded_fixture, sewage_concern, overflow, floor_water_damage, gas_concern, electrical_concern, tank_leak, no_hot_water_with_leak, uncertain_cause, access_unclear, insufficient_diagnostic_evidence.
+6. notes: a short string (1 sentence max) with operational context, e.g. "Plumber recommends inspection before fixed price". Omit if nothing.
+7. Return ONLY valid JSON: { "facts": {...}, "evidence": [...], "risk_flags": [...], "notes": string }`;
 
 export function buildVoiceUpdateUserPrompt(transcript: string): string {
   return `PLUMBER'S SPOKEN SITE NOTE:\n"${transcript}"`;
 }
 
+export const SITE_NOTE_TRANSCRIPTION_PROMPT = `Transcribe this spoken plumbing site note verbatim, in Australian English.
+
+Rules:
+1. Output ONLY the transcript text — no headers, no commentary, no quotation marks.
+2. Keep the speaker's own words. Do not summarise, correct or interpret.
+3. Use proper punctuation and sentence casing so the note reads clearly.
+4. Trade terms heard in the audio (mixer, cartridge, mini-stop, isolation valve, S-trap, braided hose) must be spelled exactly like that.`;
+
 export const BRIEFING_PROMPT = (summary: string) =>
   `You are QuoteReady's pre-call assistant. Compose a SHORT spoken briefing (4-6 sentences, plain language, no jargon, no prices) from this job state. Mention the customer's name, the readiness status, the top 1-3 things to ask or check, and the recommended next step. Do not diagnose or give safety advice; if there is a safety flag, say "this one needs safety attention" and stop.\n\nJOB STATE:\n${summary}`;
+
+export const RECOMMENDATION_SYSTEM_PROMPT = `You are the recommendation writer for QuoteReady, a quote-readiness tool used by licensed trade businesses.
+
+A deterministic rules engine has already decided the recommended action type (request_information | inspection | estimate_review | safety_escalation) and whether the job is estimate-eligible. Your job is to write the HUMAN-facing wording for that decision — a short action title and a 2-3 sentence rationale the operator can read in seconds.
+
+Rules:
+1. NEVER change the action type, NEVER invent facts, NEVER add facts that are not in the scope pack, NEVER price the job.
+2. Titles: short, imperative, plain language ("Send the customer the follow-up questions", "Book a site inspection", "Review the scope and quote", "Escalate to safety process").
+3. Rationale: 2-3 sentences, first-person-plural friendly ("We still need…"), grounded ONLY in the scope pack's missing fields, risk flags, assumptions and readiness components.
+4. If safety is flagged, lead with the safety concern and keep it to one sentence — safety language wins over everything.
+5. Return ONLY valid JSON: { "title": string, "rationale": string }.`;
+
+export function buildRecommendationUserPrompt(scope: ScopePack): string {
+  return [
+    `Write the operator-facing recommendation for this job scope.`,
+    ``,
+    `SCOPE PACK (JSON):`,
+    JSON.stringify(
+      {
+        job_type: scope.job_type,
+        readiness_score: scope.readiness_score,
+        readiness_band: scope.readiness_band,
+        components: scope.components,
+        missing_fields: scope.missing_fields,
+        risk_flags: scope.risk_flags,
+        assumptions: scope.assumptions,
+        recommended_action: {
+          type: scope.recommended_action.type,
+          estimate_eligible: scope.recommended_action.estimate_eligible,
+        },
+      },
+      null,
+      2,
+    ),
+  ].join("\n");
+}

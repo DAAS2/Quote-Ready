@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
-import { speakText, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client";
+import { speakText, ELEVENLABS_CONFIGURED, ElevenLabsError } from "@/lib/elevenlabs/client";
+import { speakWithFish, FISH_AUDIO_CONFIGURED } from "@/lib/fish/client";
 import { isDemoMode } from "@/lib/ai/demo-mode";
 import { titleCase } from "@/lib/utils/format";
 import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
@@ -8,7 +9,7 @@ import { JOB_TYPE_LABELS } from "@/lib/rules/job-templates";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** Pre-call briefing: deterministic summary text → ElevenLabs TTS (MP3). */
+/** Pre-call briefing: deterministic summary text → Fish Speech TTS (ElevenLabs fallback). */
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -23,33 +24,68 @@ export async function POST(
       );
     }
 
-    const text = composeBriefing(job);
-    const briefingText = text;
+    const briefingText = composeBriefing(job);
 
-    if (isDemoMode() || !ELEVENLABS_CONFIGURED) {
+    if (isDemoMode()) {
       return NextResponse.json(
         { error: "Voice briefings are unavailable in this mode — the written briefing is shown instead.", text: briefingText },
         { status: 503 },
       );
     }
 
-    try {
-      const mp3 = await speakText(briefingText);
-      return new NextResponse(new Uint8Array(mp3), {
-        status: 200,
-        headers: {
-          "Content-Type": "audio/mpeg",
-          "Cache-Control": "no-store",
-          "X-Briefing-Text": encodeURIComponent(briefingText),
-        },
-      });
-    } catch (error) {
-      console.warn("[QuoteReady] TTS failed:", (error as Error).message);
+    const canSpeak = FISH_AUDIO_CONFIGURED || ELEVENLABS_CONFIGURED;
+    if (!canSpeak) {
       return NextResponse.json(
-        { error: "Speech generation failed — the written briefing is shown instead.", text: briefingText },
+        { error: "No speech provider configured — the written briefing is shown instead.", text: briefingText },
         { status: 503 },
       );
     }
+
+    let mp3: Buffer | null = null;
+    let hint = "";
+
+    // 1. Fish Speech TTS first (S2.1 Pro Free — works with the default voice,
+    //    or FISH_AUDIO_VOICE_ID for a cloned voice).
+    if (FISH_AUDIO_CONFIGURED) {
+      try {
+        mp3 = await speakWithFish(briefingText);
+      } catch (error) {
+        console.warn("[QuoteReady] Fish TTS failed:", (error as Error).message);
+        hint = "Fish TTS failed — ";
+      }
+    } else {
+      hint = "Fish TTS not configured — ";
+    }
+
+    // 2. ElevenLabs fallback.
+    if (!mp3 && ELEVENLABS_CONFIGURED) {
+      try {
+        mp3 = await speakText(briefingText);
+      } catch (error) {
+        console.warn("[QuoteReady] ElevenLabs TTS failed:", (error as Error).message);
+        if (error instanceof ElevenLabsError && error.kind === "voice_not_available") {
+          hint = "No speech provider produced audio (check FISH_AUDIO_VOICE_ID or the ElevenLabs voice plan) — ";
+        } else {
+          hint = "Speech generation failed — ";
+        }
+      }
+    }
+
+    if (!mp3) {
+      return NextResponse.json(
+        { error: `${hint}the written briefing is shown instead.`, text: briefingText },
+        { status: 503 },
+      );
+    }
+
+    return new NextResponse(new Uint8Array(mp3), {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-store",
+        "X-Briefing-Text": encodeURIComponent(briefingText),
+      },
+    });
   } catch (error) {
     console.error("[QuoteReady] briefing failed:", error);
     return NextResponse.json({ error: "Briefing failed — please try again." }, { status: 500 });

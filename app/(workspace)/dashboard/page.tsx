@@ -1,73 +1,39 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ensureSeeded, store } from "@/lib/data/jobs";
-import { JobCard } from "@/components/dashboard/job-card";
-import { EmptyJobs } from "@/components/dashboard/empty-jobs";
+import { store, ensureSeeded } from "@/lib/data/jobs";
+import { TriageDashboard } from "@/components/triage/triage-dashboard";
+import { toTriageRow } from "@/lib/ui/triage";
 
-export const metadata: Metadata = { title: "Jobs" };
+export const metadata: Metadata = { title: "Triage dashboard" };
 export const dynamic = "force-dynamic";
 
-const FILTERS = [
-  { key: "all", label: "All jobs" },
-  { key: "needs_information", label: "Needs info" },
-  { key: "inspection_recommended", label: "Inspection" },
-  { key: "ready_for_estimate", label: "Ready" },
-] as const;
+function greetingFor(date: Date): string {
+  const h = date.getHours();
+  if (h < 12) return "Good morning, Alex";
+  if (h < 17) return "Good afternoon, Alex";
+  return "Good evening, Alex";
+}
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function DashboardPage() {
   await ensureSeeded();
   const jobs = await store.listJobs();
-  const filter = (await searchParams).filter as string | undefined;
-  const active = FILTERS.some((f) => f.key === filter) ? filter : "all";
-  const filtered =
-    active === "all"
-      ? jobs
-      : jobs.filter((j) =>
-          active === "ready_for_estimate"
-            ? j.status === "ready_for_estimate"
-            : j.status === active,
-        );
+  const active = jobs.filter((j) => j.status !== "closed");
+  const rows = active.map(toTriageRow);
+
+  const needsInfo = rows.filter(
+    (r) => r.statusLabel === "Needs information" || r.statusLabel === "Attention required",
+  ).length;
+  const inspection = rows.filter((r) => r.statusLabel === "Inspection recommended").length;
+  const ready = rows.filter((r) => r.statusLabel === "Ready for estimate").length;
+
+  const voiceJobId = rows[0]?.id ?? null;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Jobs</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {jobs.length} enquir{jobs.length === 1 ? "y" : "ies"} ·{" "}
-            {jobs.filter((j) => j.safety_flag).length} with safety attention
-          </p>
-        </div>
-        <nav aria-label="Status filters" className="flex rounded-md border bg-card p-0.5 text-sm shadow-xs">
-          {FILTERS.map((f) => (
-            <Link
-              key={f.key}
-              href={f.key === "all" ? "/dashboard" : `/dashboard?filter=${f.key}`}
-              scroll={false}
-              aria-current={active === f.key ? "page" : undefined}
-              className={`rounded-[5px] px-3 py-1.5 font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring/60 ${
-                active === f.key
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {f.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <div className="space-y-2.5">
-        {filtered.length === 0 ? (
-          <EmptyJobs />
-        ) : (
-          filtered.map((job) => <JobCard key={job.id} job={job} />)
-        )}
-      </div>
-    </div>
+    <TriageDashboard
+      greeting={greetingFor(new Date())}
+      rows={rows}
+      counts={{ needsInfo, inspection, ready }}
+      totalActive={active.length}
+      voiceJobId={voiceJobId}
+    />
   );
 }

@@ -5,10 +5,9 @@ import {
   type JobType,
   type MissingField,
   type RecommendedAction,
-  type RiskFlag,
   type ScopePack,
 } from "@/lib/ai/schemas";
-import { getTemplate } from "./job-templates";
+import { getTemplate, type JobTemplate } from "./job-templates";
 import {
   bandFromScore,
   calculateComponents,
@@ -40,6 +39,8 @@ export interface ScopePackInput {
   recommended_questions?: string[];
   version: number;
   produced_by: ScopePack["produced_by"];
+  /** custom (user-edited) template — overrides the built-in template for this run */
+  template?: JobTemplate;
 }
 
 const CAP_INSPECTION = 69;
@@ -48,7 +49,7 @@ const CAP_INSPECTION = 69;
 const STARVATION_THRESHOLD = 2;
 
 export function buildScopePack(input: ScopePackInput): ScopePack {
-  const template = getTemplate(input.job_type);
+  const template = input.template ?? getTemplate(input.job_type);
   // Never trust callers: normalise facts so every field exists
   const facts: JobFacts = { ...EMPTY_FACTS, ...(input.facts ?? {}) };
   const overrideReasons: string[] = [];

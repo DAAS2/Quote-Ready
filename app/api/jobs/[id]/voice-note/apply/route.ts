@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
 import { buildVoicePreview } from "@/lib/ai/voice";
 import { VoiceUpdateSchema } from "@/lib/ai/schemas";
+import { resolveJobTemplate } from "@/lib/rules/template-resolve";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,7 +37,8 @@ export async function POST(
     }
     const update = parsedUpdate.data;
 
-    const { newPack } = buildVoicePreview(job, transcript, update);
+    const template = await resolveJobTemplate(store, job).catch(() => undefined);
+    const { newPack } = buildVoicePreview(job, transcript, update, template);
 
     await store.updateJobFacts(id, newPack.facts, newPack, []);
 

@@ -1,15 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import {
   GeminiAnalysisSchema,
   VoiceUpdateSchema,
   type GeminiAnalysis,
+  type ScopePack,
   type VoiceUpdate,
 } from "./schemas";
 import {
   EXTRACTION_SYSTEM_PROMPT,
   VOICE_UPDATE_SYSTEM_PROMPT,
+  SITE_NOTE_TRANSCRIPTION_PROMPT,
   buildExtractionUserPrompt,
   buildVoiceUpdateUserPrompt,
+  RECOMMENDATION_SYSTEM_PROMPT,
+  buildRecommendationUserPrompt,
 } from "./prompts";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -42,7 +47,7 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! });
 }
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
 
 export async function extractJobFacts(input: {
   enquiry_text: string;
@@ -70,9 +75,7 @@ export async function extractJobFacts(input: {
         systemInstruction: EXTRACTION_SYSTEM_PROMPT,
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 2048,
-        // skip "thinking" for speed + deterministic cost in a small extraction task
-        thinkingConfig: { thinkingBudget: 0 },
+        maxOutputTokens: 4096,
       },
     });
     text = response.text;
@@ -91,7 +94,13 @@ export async function extractJobFacts(input: {
   try {
     json = JSON.parse(stripToFence(text));
   } catch {
-    throw new GeminiError(`Gemini response was not valid JSON`, "invalid_json");
+    // Robust recovery: scan for the first balanced JSON object — models
+    // occasionally wrap or truncate; never fabricate, but salvage valid output.
+    json = tryExtractJsonObject(text);
+    if (json === undefined) {
+      console.warn("[QuoteReady] Gemini JSON parse failed, raw head:", text.slice(0, 160));
+      throw new GeminiError(`Gemini response was not valid JSON`, "invalid_json");
+    }
   }
 
   const parsed = GeminiAnalysisSchema.safeParse(json);
@@ -111,10 +120,87 @@ function stripToFence(text: string): string {
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
+/** Find the first balanced top-level JSON object/array in arbitrary text. */
+function tryExtractJsonObject(text: string): unknown | undefined {
+  const candidates: string[] = [];
+  const starts: number[] = [];
+  const stack: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      // skip string contents
+      i++;
+      while (i < text.length) {
+        if (text[i] === "\\") i += 2;
+        else if (text[i] === '"') break;
+        else i++;
+      }
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      starts.push(i);
+      stack.push(ch);
+    } else if (ch === "}" || ch === "]") {
+      if (stack.length === 0) continue;
+      const open = stack.pop()!;
+      if ((open === "{" && ch === "}") || (open === "[" && ch === "]")) {
+        if (stack.length === 0) {
+          const start = starts.pop()!;
+          candidates.push(text.slice(start, i + 1));
+        }
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try the next balanced block
+    }
+  }
+  return undefined;
+}
+
+/* ── Audio transcription (recorded site note → verbatim transcript) ──────── */
+
+export async function transcribeSiteNote(input: {
+  mimeType: string;
+  base64: string;
+}): Promise<string> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: SITE_NOTE_TRANSCRIPTION_PROMPT },
+            { inlineData: { mimeType: input.mimeType, data: input.base64 } },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+  return text.trim();
+}
+
 /* ── Voice-note structured update ────────────────────────────────────────── */
 
-export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {
-  const ai = getClient();
+export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdate> {  const ai = getClient();
 
   let text: string | undefined;
   try {
@@ -125,8 +211,7 @@ export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdat
         systemInstruction: VOICE_UPDATE_SYSTEM_PROMPT,
         responseMimeType: "application/json",
         temperature: 0.1,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
+        maxOutputTokens: 2048,
       },
     });
     text = response.text;
@@ -149,6 +234,57 @@ export async function extractVoiceUpdate(transcript: string): Promise<VoiceUpdat
   if (!parsed.success) {
     throw new GeminiError(
       `Voice update failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      "schema",
+    );
+  }
+  return parsed.data;
+}
+
+/* ── Human-facing recommended-action wording (AI, rules stay authoritative) ── */
+
+const RecommendationSchema = z.object({
+  title: z.string().min(1).max(160),
+  rationale: z.string().min(1).max(600),
+});
+
+export async function writeRecommendation(scope: ScopePack): Promise<{
+  title: string;
+  rationale: string;
+}> {
+  const ai = getClient();
+
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: buildRecommendationUserPrompt(scope) }] }],
+      config: {
+        systemInstruction: RECOMMENDATION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.4,
+        maxOutputTokens: 1024,
+      },
+    });
+    text = response.text;
+  } catch (error) {
+    throw new GeminiError(`Gemini API call failed: ${(error as Error).message}`, "api");
+  }
+
+  if (!text || text.trim() === "") {
+    throw new GeminiError("Gemini returned an empty response", "empty_response");
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(stripToFence(text));
+  } catch {
+    throw new GeminiError("Gemini response was not valid JSON", "invalid_json");
+  }
+
+  const parsed = RecommendationSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new GeminiError(
+      `Recommendation failed schema validation: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
       "schema",
     );
   }

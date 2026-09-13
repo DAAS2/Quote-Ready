@@ -6,6 +6,7 @@ import type {
   JobType,
   ScopePack,
 } from "@/lib/ai/schemas";
+import type { JobTemplate } from "@/lib/rules/job-templates";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Workflow state shared across graph nodes.
@@ -19,6 +20,8 @@ export const WorkflowState = Annotation.Root({
   customer_suburb: Annotation<string | null>,
   image_paths: Annotation<string[]>,
   existing_version: Annotation<number>,
+  /** custom (user-edited) service template the job is graded against */
+  template: Annotation<JobTemplate | null>,
 
   /** extraction result (ai or fallback) */
   analysis: Annotation<GeminiAnalysis | null>({
@@ -58,6 +61,11 @@ export const WorkflowState = Annotation.Root({
   override_reasons: Annotation<string[]>({
     reducer: (_a, b) => b,
     default: () => [],
+  }),
+  /** true when the AI wrote the recommendation wording (rules still decide the type) */
+  recommendation_ai: Annotation<boolean>({
+    reducer: (_a, b) => b,
+    default: () => false,
   }),
 
   /** diagnostics for audit */

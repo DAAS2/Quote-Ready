@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/data/jobs";
 import { transcribeAudio, ELEVENLABS_CONFIGURED } from "@/lib/elevenlabs/client";
+import { transcribeWithFish, FISH_AUDIO_CONFIGURED } from "@/lib/fish/client";
 import { extractVoiceUpdate, GEMINI_CONFIGURED, GeminiError } from "@/lib/ai/gemini";
 import { isDemoMode } from "@/lib/ai/demo-mode";
 import { buildVoicePreview, deterministicVoiceUpdate } from "@/lib/ai/voice";
-import { mergeFacts } from "@/lib/rules/merge";
 import { DEMO_VOICE_NOTE } from "@/lib/data/demo-seed";
 
 export const runtime = "nodejs";
@@ -16,6 +16,8 @@ const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
  * Voice-note preview: transcribe (if audio), extract structured update,
  * compute the diff — but persist NOTHING until the operator applies it.
  * Body: multipart with `audio` file, or JSON { transcript }.
+ *
+ * STT order: Fish Speech (Fish Audio) → ElevenLabs Scribe → manual paste.
  */
 export async function POST(
   request: Request,
@@ -30,10 +32,22 @@ export async function POST(
 
     const contentType = request.headers.get("content-type") ?? "";
     let transcript: string;
-    let transcriptionSource: "elevenlabs" | "manual";
+    let transcriptionSource: "fish" | "elevenlabs" | "manual";
 
     if (contentType.includes("multipart/form-data")) {
-      const form = await request.formData();
+      let form: FormData;
+      try {
+        form = await request.formData();
+      } catch {
+        // Malformed multipart body (missing boundary etc.) — surface a clean error.
+        return NextResponse.json(
+          {
+            error: "Could not read the recording — please try again or paste the transcript.",
+            demo_transcript: DEMO_VOICE_NOTE.transcript,
+          },
+          { status: 400 },
+        );
+      }
       const audio = form.get("audio");
       if (!(audio instanceof File) || audio.size === 0) {
         return NextResponse.json({ error: "No audio received." }, { status: 400 });
@@ -41,7 +55,7 @@ export async function POST(
       if (audio.size > MAX_AUDIO_BYTES) {
         return NextResponse.json({ error: "Recording is too large (max 15MB)." }, { status: 400 });
       }
-      if (isDemoMode() || !ELEVENLABS_CONFIGURED) {
+      if (isDemoMode() || (!FISH_AUDIO_CONFIGURED && !ELEVENLABS_CONFIGURED)) {
         return NextResponse.json(
           {
             error: "Transcription is unavailable in this mode. Paste the transcript instead.",
@@ -50,22 +64,56 @@ export async function POST(
           { status: 503 },
         );
       }
-      try {
-        transcript = await transcribeAudio(
-          Buffer.from(await audio.arrayBuffer()),
-          audio.name || "site-note.webm",
-          audio.type,
-        );
-        transcriptionSource = "elevenlabs";
-      } catch (error) {
-        console.warn("[QuoteReady] STT failed:", (error as Error).message);
-        return NextResponse.json(
-          {
-            error: "Transcription failed — you can paste the transcript instead.",
-            demo_transcript: DEMO_VOICE_NOTE.transcript,
-          },
-          { status: 503 },
-        );
+
+      const audioBuffer = Buffer.from(await audio.arrayBuffer());
+      const filename = audio.name || "site-note.webm";
+      const mimeType = audio.type;
+
+      // 1. Fish Speech ASR first
+      if (FISH_AUDIO_CONFIGURED) {
+        try {
+          transcript = await transcribeWithFish(audioBuffer, filename, mimeType);
+          transcriptionSource = "fish";
+        } catch (error) {
+          console.warn("[QuoteReady] Fish ASR failed, trying ElevenLabs:", (error as Error).message);
+          if (ELEVENLABS_CONFIGURED) {
+            try {
+              transcript = await transcribeAudio(audioBuffer, filename, mimeType);
+              transcriptionSource = "elevenlabs";
+            } catch (fallbackError) {
+              console.warn("[QuoteReady] ElevenLabs STT also failed:", (fallbackError as Error).message);
+              return NextResponse.json(
+                {
+                  error: "Transcription failed — you can paste the transcript instead.",
+                  demo_transcript: DEMO_VOICE_NOTE.transcript,
+                },
+                { status: 503 },
+              );
+            }
+          } else {
+            return NextResponse.json(
+              {
+                error: "Transcription failed — you can paste the transcript instead.",
+                demo_transcript: DEMO_VOICE_NOTE.transcript,
+              },
+              { status: 503 },
+            );
+          }
+        }
+      } else {
+        try {
+          transcript = await transcribeAudio(audioBuffer, filename, mimeType);
+          transcriptionSource = "elevenlabs";
+        } catch (error) {
+          console.warn("[QuoteReady] STT failed:", (error as Error).message);
+          return NextResponse.json(
+            {
+              error: "Transcription failed — you can paste the transcript instead.",
+              demo_transcript: DEMO_VOICE_NOTE.transcript,
+            },
+            { status: 503 },
+          );
+        }
       }
     } else {
       const body = (await request.json().catch(() => null)) as { transcript?: string } | null;

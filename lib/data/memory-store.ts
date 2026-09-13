@@ -1,8 +1,9 @@
 import type { JobFacts, JobStatus, MessageType, ScopePack } from "@/lib/ai/schemas";
-import { DEMO_JOB_SEEDS, DEMO_VOICE_NOTE } from "./demo-seed";
+import { DEMO_JOB_SEEDS } from "./demo-seed";
 import { buildSeedPack, SEED_AGE_HOURS } from "./seed";
 import { deriveAnalysisStatus } from "@/lib/rules/status";
 import type {
+  AuditFeedRow,
   AuditInsert,
   AuditRow,
   CreateJobInput,
@@ -10,7 +11,9 @@ import type {
   EvidenceRow,
   JobDetail,
   JobListItem,
+  SaveTemplateInput,
   Store,
+  TemplateRow,
 } from "./types";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -27,6 +30,7 @@ interface MemJob {
   safety_flag: boolean;
   inspection_recommended: boolean;
   enquiry_text: string | null;
+  intake_channel?: string | null;
   extracted_facts: JobFacts;
   created_at: string;
   updated_at: string;
@@ -36,10 +40,14 @@ interface MemJob {
   evidence: EvidenceRow[];
   audit: AuditRow[];
   drafts: DraftRow[];
+  template_id: string | null;
 }
 
-const g = globalThis as unknown as { __qr_mem?: Map<string, MemJob> };
+type MemTemplate = Omit<TemplateRow, "organisation_id">;
+
+const g = globalThis as unknown as { __qr_mem?: Map<string, MemJob>; __qr_templates?: Map<string, MemTemplate> };
 const jobs: Map<string, MemJob> = (g.__qr_mem ??= new Map());
+const templates: Map<string, MemTemplate> = (g.__qr_templates ??= new Map());
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -71,12 +79,14 @@ function ensureSeed(): void {
       safety_flag: pack.safety_flag,
       inspection_recommended: pack.inspection_recommended,
       enquiry_text: seed.enquiry_text,
+      intake_channel: "text",
       extracted_facts: pack.facts,
       created_at: created,
       updated_at: created,
       image_paths: seed.image_paths,
       scope: pack,
       versions: [pack],
+      template_id: null,
       evidence,
       audit: [
         {
@@ -96,7 +106,19 @@ function ensureSeed(): void {
           created_at: created,
         },
       ],
-      drafts: [],
+      drafts: seed.seed_draft
+        ? [
+            {
+              id: crypto.randomUUID(),
+              message_type: seed.seed_draft.message_type,
+              body: seed.seed_draft.body,
+              requests_fields: seed.seed_draft.requests_fields,
+              status: "draft" as const,
+              created_at: created,
+              approved_at: null,
+            },
+          ]
+        : [],
     };
     jobs.set(id, job);
   }
@@ -119,6 +141,7 @@ export class MemoryStore implements Store {
     return {
       ...toListItem(job),
       enquiry_text: job.enquiry_text,
+      intake_channel: job.intake_channel as never ?? null,
       extracted_facts: job.extracted_facts,
       scope: job.scope,
       scope_version: job.scope?.version ?? null,
@@ -127,6 +150,7 @@ export class MemoryStore implements Store {
       audit_events: [...job.audit].sort((a, b) => b.created_at.localeCompare(a.created_at)),
       drafts: [...job.drafts].sort((a, b) => b.created_at.localeCompare(a.created_at)),
       image_paths: job.image_paths,
+      template_id: job.template_id,
     };
   }
 
@@ -143,12 +167,14 @@ export class MemoryStore implements Store {
       safety_flag: false,
       inspection_recommended: false,
       enquiry_text: input.enquiry_text,
+      intake_channel: input.intake_channel ?? "text",
       extracted_facts: { symptoms: [], photo_count: input.image_paths.length, voice_note_count: 0, notes: [] },
       created_at: ts,
       updated_at: ts,
       image_paths: input.image_paths,
       scope: null,
       versions: [],
+      template_id: input.template_id ?? null,
       evidence: [
         {
           id: crypto.randomUUID(),
@@ -208,6 +234,13 @@ export class MemoryStore implements Store {
     job.updated_at = nowIso();
   }
 
+  async updateEnquiryText(id: string, enquiryText: string): Promise<void> {
+    const job = jobs.get(id);
+    if (!job) return;
+    job.enquiry_text = enquiryText;
+    job.updated_at = nowIso();
+  }
+
   async setJobStatus(jobId: string, status: JobStatus): Promise<void> {
     const job = jobs.get(jobId);
     if (!job) return;
@@ -232,6 +265,15 @@ export class MemoryStore implements Store {
       approved_at: null,
     });
     return id;
+  }
+
+  async updateDraftBody(jobId: string, draftId: string, body: string): Promise<void> {
+    const job = jobs.get(jobId);
+    const d = job?.drafts.find((x) => x.id === draftId);
+    if (d && d.status === "draft") {
+      d.body = body;
+      job!.updated_at = nowIso();
+    }
   }
 
   async approveDraft(jobId: string, draftId: string, body?: string): Promise<void> {
@@ -265,6 +307,70 @@ export class MemoryStore implements Store {
     return job ? [...job.audit] : [];
   }
 
+  async listRecentAuditFeed(limit: number): Promise<AuditFeedRow[]> {
+    ensureSeed();
+    const feed: AuditFeedRow[] = [];
+    for (const job of jobs.values()) {
+      for (const event of job.audit) {
+        feed.push({
+          ...event,
+          job_id: job.id,
+          job_name: job.customer.full_name,
+        });
+      }
+    }
+    return feed
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit);
+  }
+
+  async listTemplates(): Promise<TemplateRow[]> {
+    return [...templates.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getTemplate(id: string): Promise<TemplateRow | null> {
+    return templates.get(id) ?? null;
+  }
+
+  async saveTemplate(input: SaveTemplateInput): Promise<string> {
+    const now = nowIso();
+    if (input.id) {
+      const existing = templates.get(input.id);
+      if (existing) {
+        const updated: TemplateRow = {
+          ...existing,
+          base_type: input.base_type,
+          name: input.name,
+          blurb: input.blurb ?? null,
+          is_default: input.is_default,
+          document: input.document,
+          updated_at: now,
+        };
+        templates.set(updated.id, updated);
+        return updated.id;
+      }
+    }
+    const id = crypto.randomUUID();
+    templates.set(id, {
+      id,
+      base_type: input.base_type,
+      name: input.name,
+      blurb: input.blurb ?? null,
+      is_default: input.is_default,
+      document: input.document,
+      created_at: now,
+      updated_at: now,
+    });
+    return id;
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    templates.delete(id);
+    for (const job of jobs.values()) {
+      if (job.template_id === id) job.template_id = null;
+    }
+  }
+
   async resetDemo(): Promise<void> {
     jobs.clear();
     ensureSeed();
@@ -279,9 +385,16 @@ function toListItem(job: MemJob): JobListItem {
     status: job.status,
     readiness_score: job.readiness_score,
     safety_flag: job.safety_flag,
+    inspection_recommended: job.inspection_recommended,
     suburb: job.customer.suburb ?? null,
     updated_at: job.updated_at,
     created_at: job.created_at,
+    enquiry_text: job.enquiry_text,
+    phone: job.customer.phone ?? null,
+    photo_count: job.extracted_facts.photo_count ?? job.image_paths.length,
+    voice_note_count: job.extracted_facts.voice_note_count,
+    missing_hint: job.scope?.missing_fields[0]?.label ?? null,
+    ready_note: job.extracted_facts.notes[0] ?? null,
   };
 }
 
