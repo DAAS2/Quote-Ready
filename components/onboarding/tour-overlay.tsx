@@ -84,7 +84,8 @@ export function TourOverlay() {
     if (!active) return;
     const route = step.route;
     if (!route) return;
-    const target = resolveTourRoute(route, jobIdRef.current);
+    // read the job id fresh each time — the enquiry form stores it mid-tour
+    const target = resolveTourRoute(route, readTourJobId() ?? jobIdRef.current);
     if (!target || target === "/jobs/") return;
     const [base, query] = target.split("?");
     // Treat nested routes (e.g. /jobs/:id/analysing) as already "here" so the
