@@ -90,7 +90,13 @@ export function TourOverlay() {
     const [base, query] = target.split("?");
     // Treat nested routes (e.g. /jobs/:id/analysing) as already "here" so the
     // tour never interrupts an in-flight analysis redirect.
-    if (pathname === base || pathname.startsWith(`${base}/`)) return;
+    if (pathname.startsWith(`${base}/`)) return;
+    if (pathname === base) {
+      // Same path but the step needs a query flag (e.g. /jobs/new?tour=1 for
+      // the pre-filled tour enquiry) — the plain link landed without it.
+      const current = window.location.search.replace(/^\?/, "");
+      if (!query || current === query) return;
+    }
     router.push(query ? `${base}?${query}` : base);
   }, [active, step, pathname, router]);
 
@@ -163,7 +169,12 @@ export function TourOverlay() {
   const waiting = Boolean(step.advanceOnClick && hole);
 
   return (
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Product tour">
+    <div
+      className="fixed inset-0 z-[100] pointer-events-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Product tour"
+    >
       {hole ? (
         <>
           {/* Blurred, dimmed backdrop panels — the hole between them stays crisp
@@ -197,12 +208,12 @@ export function TourOverlay() {
           />
         </>
       ) : (
-        <div className="absolute inset-0 bg-[#0b1524]/60 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 pointer-events-auto bg-[#0b1524]/60 backdrop-blur-[2px]" />
       )}
 
       {/* Tooltip / step card */}
       <div
-        className="absolute z-[101] w-[min(92vw,380px)] rounded-2xl bg-surface-container-lowest shadow-2xl p-5 flex flex-col gap-3"
+        className="absolute z-[101] pointer-events-auto w-[min(92vw,380px)] rounded-2xl bg-surface-container-lowest shadow-2xl p-5 flex flex-col gap-3"
         style={{ top: tooltip.top, left: tooltip.left }}
       >
         <div className="flex items-center justify-between gap-3">
@@ -268,7 +279,7 @@ export function TourOverlay() {
 function BackdropPanel({ style }: { style: React.CSSProperties }) {
   return (
     <div
-      className="absolute bg-[#0b1524]/60 backdrop-blur-[2px]"
+      className="absolute pointer-events-auto bg-[#0b1524]/60 backdrop-blur-[2px]"
       style={style}
       aria-hidden
     />

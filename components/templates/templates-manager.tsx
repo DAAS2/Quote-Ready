@@ -96,6 +96,21 @@ function builtInEditorState(base: JobType): EditorState {
   };
 }
 
+/** Blank custom template — the "create a new service category" starting point. */
+function newTemplateEditor(): EditorState {
+  return {
+    ...builtInEditorState("leaking_tap"),
+    name: "New custom template",
+    editingBuiltin: false,
+    is_default: false,
+    fields: [],
+    conditions: [],
+    assumptions: [],
+    exclusions: [],
+    questions: {},
+  };
+}
+
 interface TemplateDetailSource {
   required_fields?: Array<{
     key: string;
@@ -278,14 +293,28 @@ function toDocument(state: EditorState): JobTemplate {
 
 export function TemplatesManager({
   initialTemplates,
+  autoNew = false,
 }: {
   initialTemplates: TemplateRow[];
+  /** Opened from the enquiry form's "create a new service category" option. */
+  autoNew?: boolean;
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates);
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(() =>
+    autoNew ? newTemplateEditor() : null,
+  );
   const [busy, setBusy] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  /**
+   * Collapsible cards. Undefined means "use the default": the first three
+   * templates are open and everything after them starts collapsed, so the grid
+   * never opens as one long wall of text.
+   */
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const isCardOpen = (key: string, index: number) => openCards[key] ?? index < 3;
+  const toggleCard = (key: string, index: number) =>
+    setOpenCards((prev) => ({ ...prev, [key]: !(prev[key] ?? index < 3) }));
   const [viewing, setViewing] = useState<{
     name: string;
     blurb: string;
@@ -520,7 +549,7 @@ export function TemplatesManager({
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg shadow-sm hover:bg-surface-container-low transition-colors disabled:opacity-60"
-            onClick={() => setEditor({ ...builtInEditorState("leaking_tap"), name: "New custom template", editingBuiltin: false, is_default: false, fields: [], conditions: [], assumptions: [], exclusions: [], questions: {} })}
+            onClick={() => setEditor(newTemplateEditor())}
             type="button"
           >
             <span className="material-symbols-outlined text-[18px] align-middle mr-1">add</span>
@@ -941,9 +970,10 @@ export function TemplatesManager({
       {/* Template cards */}
       <div data-tour="templates-list" className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
         {/* Built-ins (editable → saved as overrides) */}
-        {BASE_TYPES.map((base) => {
+        {BASE_TYPES.map((base, bi) => {
           const overridden = templates.find((t) => t.base_type === base.value && t.is_default);
           const t = JOB_TEMPLATES[base.value];
+          const open = isCardOpen(base.value, bi);
           return (
             <div
               key={base.value}
@@ -970,6 +1000,17 @@ export function TemplatesManager({
                       Customised
                     </span>
                   )}
+                  <button
+                    className="w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-low flex items-center justify-center transition-colors"
+                    onClick={() => toggleCard(base.value, bi)}
+                    aria-expanded={open}
+                    aria-label={`${open ? "Collapse" : "Expand"} ${overridden ? overridden.name : t.label}`}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {open ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
                   {/* 3-dot menu */}
                   <div className="relative">
                     <button
@@ -986,7 +1027,8 @@ export function TemplatesManager({
                           className="w-full text-left px-3 py-2 font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors flex items-center gap-2"
                           onClick={() => {
                             setMenuFor(null);
-                            overridden ? viewRow(overridden) : viewBuiltin(base.value);
+                            if (overridden) viewRow(overridden);
+                            else viewBuiltin(base.value);
                           }}
                           type="button"
                         >
@@ -1022,8 +1064,12 @@ export function TemplatesManager({
                   </div>
                 </div>
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">{t.blurb}</p>
-              <TemplateDetailPanels doc={overridden ? overridden.document : t} />
+              {open && (
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant">{t.blurb}</p>
+                  <TemplateDetailPanels doc={overridden ? overridden.document : t} />
+                </>
+              )}
             </div>
           );
         })}
@@ -1031,7 +1077,7 @@ export function TemplatesManager({
         {/* Custom templates */}
         {templates
           .filter((t) => !t.is_default || !JOB_TEMPLATES[t.base_type])
-          .map((t) => (
+          .map((t, ci) => (
             <div
               key={t.id}
               className="bg-surface-container-lowest rounded-xl shadow-sm p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
@@ -1055,6 +1101,17 @@ export function TemplatesManager({
                   <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm whitespace-nowrap">
                     {BASE_TYPES.find((b) => b.value === t.base_type)?.label}
                   </span>
+                  <button
+                    className="w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-low flex items-center justify-center transition-colors"
+                    onClick={() => toggleCard(t.id, BASE_TYPES.length + ci)}
+                    aria-expanded={isCardOpen(t.id, BASE_TYPES.length + ci)}
+                    aria-label={`${isCardOpen(t.id, BASE_TYPES.length + ci) ? "Collapse" : "Expand"} ${t.name}`}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isCardOpen(t.id, BASE_TYPES.length + ci) ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
                   {/* 3-dot menu */}
                   <div className="relative">
                     <button
@@ -1105,10 +1162,14 @@ export function TemplatesManager({
                   </div>
                 </div>
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                {t.blurb || "Custom service template."}
-              </p>
-              <TemplateDetailPanels doc={t.document} />
+              {isCardOpen(t.id, BASE_TYPES.length + ci) && (
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant">
+                    {t.blurb || "Custom service template."}
+                  </p>
+                  <TemplateDetailPanels doc={t.document} />
+                </>
+              )}
             </div>
           ))}
       </div>

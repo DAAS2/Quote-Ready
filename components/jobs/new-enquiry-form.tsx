@@ -26,6 +26,8 @@ const JOB_TYPES: Array<{ label: string; value: string }> = [
 ];
 
 const CUSTOM_PREFIX = "custom:";
+/** Sentinel option that hands off to the template builder. */
+const CREATE_CATEGORY = "__create_category__";
 
 const URGENCY_OPTIONS = [
   { label: "Standard", value: "standard" },
@@ -454,7 +456,15 @@ export function NewEnquiryForm() {
                       id="job-type"
                       className="w-full h-10 px-3 pr-9 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary-container/20 transition-all cursor-pointer"
                       value={jobType}
-                      onChange={(e) => setJobType(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value === CREATE_CATEGORY) {
+                          // send the tradie to the template builder to define the
+                          // new category, then they can file the enquiry under it
+                          router.push("/templates?new=1");
+                          return;
+                        }
+                        setJobType(e.target.value);
+                      }}
                     >
                       {JOB_TYPES.map((t) => (
                         <option key={t.label} value={t.label}>
@@ -470,6 +480,9 @@ export function NewEnquiryForm() {
                           ))}
                         </optgroup>
                       )}
+                      <optgroup label="More">
+                        <option value={CREATE_CATEGORY}>＋ Create a new service category…</option>
+                      </optgroup>
                     </select>
                     <span className="material-symbols-outlined absolute right-3 pointer-events-none text-on-surface-variant text-[18px]">
                       expand_more

@@ -363,25 +363,25 @@ export function TriageDashboard({
         </div>
         {/* Data Table Layout */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[560px] text-left">
             <thead>
               <tr className="bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
                 <th className="py-3 px-5 font-label-sm" scope="col">
                   Customer &amp; Contact
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[280px]" scope="col">
-                  Plumbing Issue &amp; Scope Details
+                <th className="py-3 px-4 font-label-sm min-w-[200px] md:min-w-[280px]" scope="col">
+                  Job Issue &amp; Scope Details
                 </th>
-                <th className="py-3 px-4 font-label-sm" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm sm:table-cell" scope="col">
                   Location
                 </th>
-                <th className="py-3 px-4 font-label-sm min-w-[220px]" scope="col">
+                <th className="py-3 px-4 font-label-sm min-w-[170px] md:min-w-[220px]" scope="col">
                   Scope Readiness
                 </th>
-                <th className="py-3 px-4 font-label-sm" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm md:table-cell" scope="col">
                   Triage Status
                 </th>
-                <th className="py-3 px-4 font-label-sm whitespace-nowrap" scope="col">
+                <th className="hidden py-3 px-4 font-label-sm whitespace-nowrap lg:table-cell" scope="col">
                   Last Updated
                 </th>
                 <th className="py-3 px-5 text-right font-label-sm" scope="col">
@@ -440,7 +440,7 @@ export function TriageDashboard({
                       </div>
                     )}
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap sm:table-cell">
                     <div className="font-body-md text-body-md text-on-surface">{row.suburb}</div>
                     <div className="font-body-sm text-body-sm text-on-surface-variant">
                       {row.postcode}
@@ -476,7 +476,7 @@ export function TriageDashboard({
                       </span>
                     </div>
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap md:table-cell">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-medium",
@@ -489,7 +489,7 @@ export function TriageDashboard({
                       {row.statusLabel}
                     </span>
                   </td>
-                  <td className="py-4 px-4 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant">
+                  <td className="hidden py-4 px-4 align-top whitespace-nowrap font-data-mono text-body-sm text-on-surface-variant lg:table-cell">
                     {row.updatedAt}
                   </td>
                   <td className="py-4 px-5 align-top text-right whitespace-nowrap">
@@ -500,7 +500,7 @@ export function TriageDashboard({
                         row.actionButton,
                       )}
                     >
-                      <span>Review scope</span>
+                      <span className="hidden sm:inline">Review scope</span>
                       <span className="material-symbols-outlined text-[16px]">chevron_right</span>
                     </Link>
                   </td>
